@@ -2,7 +2,9 @@ package org.example.chesspressoserver.components;
 
 import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
+@Component
 public class PlayerCleanupTask {
     private final OnlinePlayerService onlinePlayerService;
 

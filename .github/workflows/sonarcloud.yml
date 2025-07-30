@@ -2,17 +2,13 @@ name: SonarCloud
 
 on:
   push:
-    branches:
-      - main
-      - development
+    branches: [main, development]
   pull_request:
-    branches:
-      - main
-      - development
+    branches: [main, development]
 
 jobs:
   build:
-    name: Analyze on SonarCloud
+    name: Analyze with SonarCloud using Maven
     runs-on: ubuntu-latest
 
     steps:
@@ -21,10 +17,14 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: 17
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./gradlew
+      - name: Cache local Maven repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2
+          restore-keys: ${{ runner.os }}-m2
 
       - name: Build and analyze
-        run: ./gradlew build sonarqube -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        run: mvn clean verify sonar:sonar -Dsonar.projectKey=ChessPressoServer -Dsonar.organization=chesspresso2025 -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=${{ secrets.SONAR_TOKEN }}

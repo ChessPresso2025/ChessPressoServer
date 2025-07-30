@@ -1,9 +1,9 @@
 package org.example.chesspressoserver.google;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.google.api.client.auth.openidconnect.IdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
@@ -13,14 +13,18 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 @Service
 public class GoogleAuthService {
 
+    private static final Logger logger = Logger.getLogger(GoogleAuthService.class.getName());
     private final GoogleIdTokenVerifier verifier;
 
+    @Autowired
     public GoogleAuthService(@Value("${google.client-id}") String clientId) throws GeneralSecurityException, IOException {
-        this(clientId, createVerifier(clientId));
+        this.verifier = createVerifier(clientId);
     }
 
     // Zusätzlicher Konstruktor für Tests
@@ -45,7 +49,7 @@ public class GoogleAuthService {
                 return Optional.of(payload);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.log(Level.SEVERE, "Failed to verify Google ID token", e);
         }
         return Optional.empty();
     }

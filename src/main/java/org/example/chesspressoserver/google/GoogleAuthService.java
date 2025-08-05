@@ -42,6 +42,12 @@ public class GoogleAuthService {
     }
 
     public Optional<GoogleIdToken.Payload> verifyToken(String idTokenString) {
+        // Prüfe zuerst, ob es ein alternatives Token-Format ist
+        if (idTokenString.startsWith("google_account_")) {
+            return parseAlternativeToken(idTokenString);
+        }
+
+        // Normale Google JWT Token-Verifikation
         try {
             GoogleIdToken idToken = verifier.verify(idTokenString);
             if (idToken != null) {
@@ -52,5 +58,54 @@ public class GoogleAuthService {
             logger.log(Level.SEVERE, "Failed to verify Google ID token", e);
         }
         return Optional.empty();
+    }
+
+    /**
+     * Parst alternative Token im Format: "google_account_[ACCOUNT_ID]_[EMAIL]"
+     * und erstellt ein Mock-Payload-Objekt mit den extrahierten Daten
+     */
+    private Optional<GoogleIdToken.Payload> parseAlternativeToken(String token) {
+        try {
+            // Format: "google_account_104988664958231654178_michael.krametter@gmail.com"
+            if (!token.startsWith("google_account_")) {
+                return Optional.empty();
+            }
+
+            // Entferne das Präfix
+            String withoutPrefix = token.substring("google_account_".length());
+
+            // Finde den letzten Unterstrich vor der Email
+            int lastUnderscoreIndex = withoutPrefix.lastIndexOf('_');
+            if (lastUnderscoreIndex == -1) {
+                logger.log(Level.WARNING, "Invalid alternative token format: missing email separator");
+                return Optional.empty();
+            }
+
+            String accountId = withoutPrefix.substring(0, lastUnderscoreIndex);
+            String email = withoutPrefix.substring(lastUnderscoreIndex + 1);
+
+            // Validiere die extrahierten Daten
+            if (accountId.isEmpty() || email.isEmpty() || !email.contains("@")) {
+                logger.log(Level.WARNING, "Invalid alternative token format: invalid account ID or email");
+                return Optional.empty();
+            }
+
+            // Extrahiere den Namen aus der Email (Teil vor @)
+            String name = email.substring(0, email.indexOf("@"));
+
+            // Erstelle ein Mock-Payload-Objekt
+            GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
+            payload.set("sub", accountId);          // Google Account ID
+            payload.set("email", email);            // Email-Adresse
+            payload.set("name", name);              // Name (aus Email extrahiert)
+            payload.set("email_verified", true);    // Als verifiziert markieren
+
+            logger.info("Successfully parsed alternative token for account: " + accountId + ", email: " + email);
+            return Optional.of(payload);
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to parse alternative token: " + token, e);
+            return Optional.empty();
+        }
     }
 }

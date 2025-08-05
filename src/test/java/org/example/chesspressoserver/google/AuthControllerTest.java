@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -51,5 +52,25 @@ public class AuthControllerTest {
                         .content("{\"idToken\": \"invalid-token\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("Invalid ID token"));
+    }
+
+    @Test
+    void testAlternativeGoogleToken() throws Exception {
+        // Test für alternatives Token Format
+        String alternativeToken = "google_account_104988664958231654178_michael.krametter@gmail.com";
+
+        GoogleIdToken.Payload payload = mock(GoogleIdToken.Payload.class);
+        when(payload.get("email")).thenReturn("michael.krametter@gmail.com");
+        when(payload.get("name")).thenReturn("michael.krametter");
+        when(payload.get("sub")).thenReturn("104988664958231654178");
+
+        doReturn(Optional.of(payload)).when(googleAuthService).verifyToken(alternativeToken);
+
+        // Verify that alternative token is parsed correctly
+        Optional<GoogleIdToken.Payload> result = googleAuthService.verifyToken(alternativeToken);
+        assertTrue(result.isPresent());
+        assertEquals("104988664958231654178", result.get().get("sub"));
+        assertEquals("michael.krametter@gmail.com", result.get().get("email"));
+        assertEquals("michael.krametter", result.get().get("name"));
     }
 }

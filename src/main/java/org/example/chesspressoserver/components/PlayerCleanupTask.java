@@ -6,14 +6,15 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class PlayerCleanupTask {
+
     private final OnlinePlayerService onlinePlayerService;
 
     public PlayerCleanupTask(OnlinePlayerService onlinePlayerService) {
         this.onlinePlayerService = onlinePlayerService;
     }
 
-    @Scheduled(fixedRate = 5000)
-    public void cleanup() {
+    @Scheduled(fixedRate = 30000) // Alle 30 Sekunden
+    public void cleanupInactivePlayers() {
         onlinePlayerService.cleanup();
     }
 }

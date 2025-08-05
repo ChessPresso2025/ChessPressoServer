@@ -3,10 +3,12 @@ package org.example.chesspressoserver.components;
 import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Set;
 
+@Component
 public class ConnectionStatusBroadcaster {
     private final OnlinePlayerService onlinePlayerService;
     private final SimpMessagingTemplate simpMessagingTemplate;

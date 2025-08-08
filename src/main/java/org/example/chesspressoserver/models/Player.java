@@ -3,22 +3,17 @@ package org.example.chesspressoserver.models;
 import lombok.Getter;
 import lombok.Setter;
 
+@Getter
 public class Player {
-    @Getter
     private String playerId;
-    @Getter
     @Setter
     private String name;
-    @Getter
     @Setter
     private int playedGames;
-    @Getter
     @Setter
     private int win;
-    @Getter
     @Setter
     private int draw;
-    @Getter
     @Setter
     private int lose;
 

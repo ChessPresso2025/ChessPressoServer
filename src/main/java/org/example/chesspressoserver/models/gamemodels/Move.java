@@ -5,9 +5,9 @@ import lombok.Getter;
 @Getter
 public class Move {
 
-    private Position start;
-    private Position end;
-    private PieceType piece;
+    private final Position start;
+    private final Position end;
+    private final PieceType piece;
     private SpezialMove spezialMove;
 
     //constructor

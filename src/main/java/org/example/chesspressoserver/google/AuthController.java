@@ -25,7 +25,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
         logger.info("Login-Anfrage empfangen - Benutzername: {}", request.getUsername());
-        logger.debug("Login-Request Details: username={}, password=***", request.getUsername());
+
 
         try {
             if (request.getUsername() == null || request.getPassword() == null) {

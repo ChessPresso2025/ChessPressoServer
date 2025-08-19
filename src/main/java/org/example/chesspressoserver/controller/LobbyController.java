@@ -25,16 +25,29 @@ public class LobbyController {
 
 
     @PostMapping("/quick-join")
-    public ResponseEntity<?> quickJoin(@RequestBody QuickJoinRequest request, Principal principal) {
-        String playerId = principal != null ? principal.getName() : "anonymous";
+    public ResponseEntity<?> quickJoin(@RequestBody QuickJoinRequest request, Principal principal, HttpServletRequest httpRequest) {
+        // Verwende Session-ID als eindeutige Spieler-ID falls kein Principal vorhanden
+        String playerId = principal != null ? principal.getName() :
+                         httpRequest.getSession().getId();
+
+        System.out.println("DEBUG: Quick join request from player: " + playerId);
 
         // Prüfe ob Spieler bereits in einer Lobby ist
         String existingLobby = lobbyService.getPlayerLobby(playerId);
         if (existingLobby != null) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "error", "Du bist bereits in einer Lobby",
-                "lobbyId", existingLobby
-            ));
+            // Prüfe ob die existierende Lobby noch aktiv und nicht im Spiel ist
+            var lobby = lobbyService.getLobby(existingLobby);
+            if (lobby != null && !lobby.isGameStarted()) {
+                // Spieler ist in einer wartenden Lobby - erlaube Quick Match nicht
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Du bist bereits in einer Lobby",
+                    "lobbyId", existingLobby
+                ));
+            } else {
+                // Lobby existiert nicht mehr oder Spiel ist beendet - räume auf
+                System.out.println("DEBUG: Cleaning up stale lobby reference for player: " + playerId);
+                lobbyService.forceLeaveAllLobbies(playerId);
+            }
         }
 
         try {

@@ -1,5 +1,6 @@
 package org.example.chesspressoserver.service;
 
+import lombok.Setter;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -14,17 +15,39 @@ public class LobbyCodeGenerator {
     // Liste zum Speichern aller verwendeten Lobby-Codes
     private final List<String> usedLobbyIds = new ArrayList<>();
 
+    // Callback-Interface um aktive Lobbys zu prüfen
+    @Setter
+    private java.util.function.Function<String, Boolean> lobbyExistsChecker;
 
     public String generateLobbyCode(LobbyType lobbyType) {
         String code;
+        
+        System.out.println("DEBUG: Generating new lobby code for type: " + lobbyType);
+        System.out.println("DEBUG: Currently used codes: " + usedLobbyIds.size());
 
         do {
             code = generateRandomCode(lobbyType.getCodeLength());
-        } while (usedLobbyIds.contains(code));
+            System.out.println("DEBUG: Generated candidate code: " + code);
+        } while (isCodeInUse(code));
 
         // Code zur Liste hinzufügen
         usedLobbyIds.add(code);
+        System.out.println("DEBUG: Added code to used list. Total used codes: " + usedLobbyIds.size());
         return code;
+    }
+
+    private boolean isCodeInUse(String code) {
+        // Prüfe zuerst die lokale Liste
+        if (usedLobbyIds.contains(code)) {
+            return true;
+        }
+
+        // Prüfe auch die tatsächlich aktiven Lobbys falls Checker verfügbar
+        if (lobbyExistsChecker != null) {
+            return lobbyExistsChecker.apply(code);
+        }
+
+        return false;
     }
 
 
@@ -49,7 +72,8 @@ public class LobbyCodeGenerator {
 
 
     public boolean isCodeUsed(String code) {
-        return usedLobbyIds.contains(code);
+        // Prüfe sowohl die lokale Liste als auch die aktiven Lobbys
+        return usedLobbyIds.contains(code) || (lobbyExistsChecker != null && lobbyExistsChecker.apply(code));
     }
 
 

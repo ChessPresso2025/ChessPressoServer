@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.example.chesspressoserver.service.LobbyCodeGenerator;
+import org.example.chesspressoserver.service.LobbyType;
 import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
@@ -21,10 +23,14 @@ public class TestWebSocketController {
 
     private final OnlinePlayerService onlinePlayerService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final LobbyCodeGenerator lobbyCodeGenerator;
 
-    public TestWebSocketController(OnlinePlayerService onlinePlayerService, SimpMessagingTemplate messagingTemplate) {
+    public TestWebSocketController(OnlinePlayerService onlinePlayerService,
+                                 SimpMessagingTemplate messagingTemplate,
+                                 LobbyCodeGenerator lobbyCodeGenerator) {
         this.onlinePlayerService = onlinePlayerService;
         this.messagingTemplate = messagingTemplate;
+        this.lobbyCodeGenerator = lobbyCodeGenerator;
     }
 
     @MessageMapping("/test")
@@ -42,12 +48,50 @@ public class TestWebSocketController {
         messagingTemplate.convertAndSendToUser(playerId, "/queue/online-players", onlinePlayers);
     }
 
+    @MessageMapping("/create-lobby")
+    public void createLobby(CreateLobbyRequest request, Principal principal) {
+        String playerId = principal != null ? principal.getName() : "anonymous";
+
+        String lobbyCode;
+        if (request.isPrivate()) {
+            lobbyCode = lobbyCodeGenerator.generatePrivateLobbyCode();
+        } else {
+            lobbyCode = lobbyCodeGenerator.generatePublicLobbyCode();
+        }
+
+        LobbyCreatedResponse response = new LobbyCreatedResponse(
+            lobbyCode,
+            request.isPrivate() ? "private" : "public",
+            LocalDateTime.now().toString()
+        );
+
+        messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-created", response);
+    }
+
     @Getter
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TestMessage {
         private String content;
+        private String timestamp;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CreateLobbyRequest {
+        private boolean isPrivate;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class LobbyCreatedResponse {
+        private String lobbyCode;
+        private String lobbyType;
         private String timestamp;
     }
 }

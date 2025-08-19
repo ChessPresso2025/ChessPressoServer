@@ -9,6 +9,15 @@ public class Player {
     @Setter
     private String name;
     @Setter
+    private String username;
+    @Getter
+    @Setter
+    private String password;
+    @Getter
+    @Setter
+    private String email;
+    @Getter
+    @Setter
     private int playedGames;
     @Setter
     private int win;
@@ -17,7 +26,16 @@ public class Player {
     @Setter
     private int lose;
 
-    //Constructor
+    //Constructor for new login system
+    public Player(String playerId, String name, String username, String password, String email) {
+        this.playerId = playerId;
+        this.name = name;
+        this.username = username;
+        this.password = password;
+        this.email = email;
+    }
+
+    //Constructor for backward compatibility
     public Player(String playerId, String name) {
         this.playerId = playerId;
         this.name = name;

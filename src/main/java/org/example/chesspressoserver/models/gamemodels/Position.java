@@ -2,13 +2,11 @@ package org.example.chesspressoserver.models.gamemodels;
 
 import lombok.Getter;
 
+@Getter
 public class Position {
 
-    @Getter
     private String pos;
-    @Getter
     private int x;
-    @Getter
     private int y;
 
     //constructor

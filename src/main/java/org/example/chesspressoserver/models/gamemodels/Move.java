@@ -2,15 +2,12 @@ package org.example.chesspressoserver.models.gamemodels;
 
 import lombok.Getter;
 
+@Getter
 public class Move {
 
-    @Getter
-    private Position start;
-    @Getter
-    private Position end;
-    @Getter
-    private PieceType piece;
-    @Getter
+    private final Position start;
+    private final Position end;
+    private final PieceType piece;
     private SpezialMove spezialMove;
 
     //constructor

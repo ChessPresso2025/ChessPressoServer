@@ -2,6 +2,7 @@ package org.example.chesspressoserver.gamelogic.modles;
 
 import org.example.chesspressoserver.models.gamemodels.ChessPiece;
 import org.example.chesspressoserver.models.gamemodels.PieceType;
+import org.example.chesspressoserver.models.gamemodels.Position;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;
 
 class Board {
@@ -13,9 +14,28 @@ class Board {
     }
 
     public void setPiece(int row, int col, ChessPiece piece) {
+        cells[row][col] = piece;
     }
 
     public void removePiece(int row, int col) {
+        cells[row][col] = null;
+    }
+
+    public Position getKingPosition(TeamColor teamColor) {
+        int row = 0;
+        int collum = 0;
+        ChessPiece king = new ChessPiece(PieceType.KING, teamColor);
+        for (int i = 0; i < 8; i++) {
+            for (int j = 0; j < 8; j++) {
+                if (cells[i][j] == king) {
+                    row = i;
+                    collum = j;
+                     break;
+                }
+            }
+        }
+        Position pos = new Position(row, collum);
+        return pos;
     }
 
     public void start() {

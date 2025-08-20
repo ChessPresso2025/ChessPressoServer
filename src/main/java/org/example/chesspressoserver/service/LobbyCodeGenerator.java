@@ -7,6 +7,8 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.util.function.Function;
+
 @Service
 public class LobbyCodeGenerator {
     private static final String CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ123456789";
@@ -17,7 +19,7 @@ public class LobbyCodeGenerator {
 
     // Callback-Interface um aktive Lobbys zu prüfen
     @Setter
-    private java.util.function.Function<String, Boolean> lobbyExistsChecker;
+    private Function<String, Boolean> lobbyExistsChecker;
 
     public String generateLobbyCode(LobbyType lobbyType) {
         String code;

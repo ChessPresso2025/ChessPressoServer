@@ -1,8 +1,9 @@
 package org.example.chesspressoserver.models;
+import org.example.chesspressoserver.service.LobbyType;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.example.chesspressoserver.service.LobbyType;
+
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -12,7 +13,7 @@ import java.util.List;
 @Setter
 public class Lobby {
     private String lobbyId;
-    private org.example.chesspressoserver.service.LobbyType lobbyType;
+    private LobbyType lobbyType;
     private GameTime gameTime;
     private List<String> players;
     private String creator;
@@ -25,7 +26,7 @@ public class Lobby {
     private String blackPlayer;
     private boolean randomColors;
 
-    public Lobby(String lobbyId, org.example.chesspressoserver.service.LobbyType lobbyType, String creator) {
+    public Lobby(String lobbyId, LobbyType lobbyType, String creator) {
         this.lobbyId = lobbyId;
         this.lobbyType = lobbyType;
         this.creator = creator;

@@ -26,7 +26,7 @@ public class LobbyController {
 
     @PostMapping("/quick-join")
     public ResponseEntity<?> quickJoin(@RequestBody QuickJoinRequest request, Principal principal, HttpServletRequest httpRequest) {
-        // Verwende Session-ID als eindeutige Spieler-ID falls kein Principal vorhanden
+        // Verwende Session-ID als eindeutige Spieler-ID falls keine vorhanden
         String playerId = principal != null ? principal.getName() :
                          httpRequest.getSession().getId();
 
@@ -167,9 +167,7 @@ public class LobbyController {
     }
 
 
-    /**
-     * Spieler aus allen Lobbys entfernen (Cleanup-Endpunkt)
-     */
+
     @PostMapping("/cleanup")
     public ResponseEntity<?> cleanupPlayer(Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";

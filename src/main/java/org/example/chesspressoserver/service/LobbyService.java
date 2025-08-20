@@ -35,9 +35,7 @@ public class LobbyService {
         }
     }
 
-    /**
-     * Prüft ob eine Lobby mit dem gegebenen Code existiert
-     */
+
     private boolean lobbyExists(String lobbyCode) {
         return activeLobbies.containsKey(lobbyCode);
     }

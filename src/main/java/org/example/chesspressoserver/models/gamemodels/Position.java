@@ -16,11 +16,23 @@ public class Position {
         this.y = calculateY(this.pos);
     }
 
+    public Position(int x, int y) {
+        this.x = x;
+        this.y = y;
+        this.pos = calculatePos(x, y);
+    }
+
     private int calculateX(String pos) {
         return pos.charAt(0) - 'A';
     }
 
     private int calculateY(String pos) {
         return pos.charAt(1) - '1';
+    }
+
+    private String calculatePos(int x, int y) {
+        char file = (char) (x + 'A');
+        char rank = (char) (y + '1');
+        return "" + file + rank;
     }
 }

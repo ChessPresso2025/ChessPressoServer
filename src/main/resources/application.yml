@@ -1,0 +1,11 @@
+spring:
+  profiles:
+    default: dev   # startet automatisch mit dev
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate      # Schema kommt über Flyway
+  flyway:
+    enabled: true
+    locations: classpath:db/migration

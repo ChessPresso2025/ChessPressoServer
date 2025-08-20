@@ -78,12 +78,10 @@ public class LobbyService {
 
 
     public String createPrivateLobby(String creatorId) {
-        System.out.println("DEBUG: Creating private lobby for player: " + creatorId);
 
         // Prüfe erst, ob dieser Spieler bereits eine Lobby erstellt hat
         for (Lobby existingLobby : activeLobbies.values()) {
             if (existingLobby.getCreator().equals(creatorId) && existingLobby.isPrivate()) {
-                System.out.println("DEBUG: Player already has a private lobby: " + existingLobby.getLobbyId());
                 return existingLobby.getLobbyId(); // Gib die bestehende Lobby zurück
             }
         }
@@ -92,10 +90,7 @@ public class LobbyService {
         Lobby lobby = new Lobby(lobbyCode, LobbyType.PRIVATE, creatorId);
         activeLobbies.put(lobbyCode, lobby);
 
-        System.out.println("DEBUG: Created new lobby with code: " + lobbyCode);
-        System.out.println("DEBUG: Creator ID: " + creatorId);
-        System.out.println("DEBUG: Active lobbies count after creation: " + activeLobbies.size());
-        System.out.println("DEBUG: Lobby stored successfully: " + (activeLobbies.get(lobbyCode) != null));
+
 
         // Benachrichtige Creator
         messagingTemplate.convertAndSendToUser(creatorId, "/queue/lobby-created",
@@ -106,9 +101,6 @@ public class LobbyService {
 
 
     public boolean joinPrivateLobby(String playerId, String lobbyCode) {
-        System.out.println("DEBUG: Trying to join lobby with code: " + lobbyCode);
-        System.out.println("DEBUG: Player ID: " + playerId);
-        System.out.println("DEBUG: Active lobbies count: " + activeLobbies.size());
 
         Lobby lobby = activeLobbies.get(lobbyCode);
 
@@ -119,10 +111,6 @@ public class LobbyService {
             return false;
         }
 
-        System.out.println("DEBUG: Lobby found. Current players: " + lobby.getPlayers());
-        System.out.println("DEBUG: Lobby status: " + lobby.getStatus());
-        System.out.println("DEBUG: Is lobby full: " + lobby.isFull());
-
         if (lobby.isFull()) {
             System.out.println("DEBUG: Lobby is full");
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
@@ -131,7 +119,6 @@ public class LobbyService {
         }
 
         if (lobby.getStatus() != LobbyStatus.WAITING) {
-            System.out.println("DEBUG: Lobby status is not WAITING: " + lobby.getStatus());
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
                 Map.of("error", "Lobby ist nicht mehr verfügbar"));
             return false;
@@ -139,11 +126,9 @@ public class LobbyService {
 
         // Prüfe ob Spieler bereits in dieser Lobby ist
         if (lobby.getPlayers().contains(playerId)) {
-            System.out.println("DEBUG: Player already in this lobby");
             return true; // Spieler ist bereits in der Lobby
         }
 
-        System.out.println("DEBUG: Adding player to lobby");
         lobby.addPlayer(playerId);
         lobby.setStatus(LobbyStatus.FULL);
 
@@ -170,8 +155,6 @@ public class LobbyService {
             "isLobbyFull", true
         ));
 
-        System.out.println("DEBUG: Player successfully added. New player count: " + lobby.getPlayers().size());
-        System.out.println("DEBUG: Sent specific notifications to both players");
         return true;
     }
 
@@ -287,6 +270,10 @@ public class LobbyService {
         return activeLobbies.values();
     }
 
+    public Collection<Lobby> getAllActiveLobbies() {
+        return activeLobbies.values();
+    }
+
 
 
     public String getPlayerLobby(String playerId) {
@@ -322,9 +309,7 @@ public class LobbyService {
         }
     }
 
-    /**
-     * Räumt verwaiste Lobbys auf (älter als 10 Minuten ohne Aktivität)
-     */
+
     public void cleanupStaleLobbies() {
         List<String> lobbiesToRemove = new ArrayList<>();
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(10);

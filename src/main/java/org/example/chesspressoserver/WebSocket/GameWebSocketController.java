@@ -1,6 +1,5 @@
 package org.example.chesspressoserver.WebSocket;
 
-import org.example.chesspressoserver.models.Player;
 import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
@@ -23,7 +22,7 @@ public class GameWebSocketController {
 
     @MessageMapping("/connect")
     @SendTo("/topic/players")
-    public String handlePlayerConnect(Player player, Principal principal) {
+    public String handlePlayerConnect(Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";
         onlinePlayerService.updateHeartbeat(playerId);
         return "Player " + playerId + " connected";

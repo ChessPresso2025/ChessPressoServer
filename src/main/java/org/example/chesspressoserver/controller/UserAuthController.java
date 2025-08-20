@@ -11,14 +11,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth") // Geändert von "/api/auth" zu "/auth"
 @RequiredArgsConstructor
 @Slf4j
 public class UserAuthController {
 
     private final AuthService authService;
 
-    @PostMapping("/register")
+    @PostMapping("/register") // Geändert von "/auth/register" zu "/register"
     public ResponseEntity<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Registration attempt for username: {}", request.getUsername());
         TokenResponse response = authService.register(request);

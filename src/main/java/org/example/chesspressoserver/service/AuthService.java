@@ -51,10 +51,9 @@ public class AuthService {
 
             user = userRepository.save(user);
 
-            // Create initial stats for user
+            // Create initial stats for user (simplified without user reference)
             UserStats stats = UserStats.builder()
                     .userId(user.getId())
-                    .user(user)
                     .wins(0)
                     .losses(0)
                     .draws(0)

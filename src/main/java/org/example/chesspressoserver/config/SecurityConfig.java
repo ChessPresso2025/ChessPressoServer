@@ -29,9 +29,13 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()  // Google Auth
-                .requestMatchers("/api/auth/**").permitAll()  // JWT Auth
+                .requestMatchers("/auth/**").permitAll()  // JWT Auth
                 .requestMatchers("/health").permitAll()  // Health check
+                .requestMatchers("/ws/**").permitAll()   // WebSocket endpoints
+                .requestMatchers("/websocket/**").permitAll()  // WebSocket endpoints
+                .requestMatchers("/app/**").permitAll()  // WebSocket app destinations
+                .requestMatchers("/topic/**").permitAll()  // WebSocket topics
+                .requestMatchers("/queue/**").permitAll()  // WebSocket queues
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -12,12 +12,12 @@ import java.util.Map;
 @Getter
 @Setter
 public class Lobby {
-
+    
     // LobbyType enum direkt hier definieren
     public enum LobbyType {
         PRIVATE, PUBLIC
     }
-
+    
     private String lobbyId;
     private LobbyType lobbyType;
     private GameTime gameTime;
@@ -31,7 +31,7 @@ public class Lobby {
     private String whitePlayer;
     private String blackPlayer;
     private boolean randomColors;
-
+    
     // Neue Felder für Ready-Status
     private Map<String, Boolean> playerReadyStatus;
 
@@ -100,13 +100,13 @@ public class Lobby {
         if (players.size() < 2) {
             return false;
         }
-
+        
         for (String playerId : players) {
             if (!playerReadyStatus.getOrDefault(playerId, false)) {
                 return false;
             }
         }
-
+        
         return true;
     }
 

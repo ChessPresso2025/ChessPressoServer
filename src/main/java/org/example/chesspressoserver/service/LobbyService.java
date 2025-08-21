@@ -53,9 +53,14 @@ public class LobbyService {
             activeLobbies.put(lobbyId, lobby);
             queue.offer(lobbyId);
 
-            // Benachrichtige Spieler über Warten
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-waiting",
-                Map.of("lobbyId", lobbyId, "message", "Warte auf Gegner..."));
+            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-update",
+                Map.of(
+                    "type", "LOBBY_UPDATE",
+                    "lobbyId", lobbyId,
+                    "players", lobby.getPlayers(),
+                    "status", "WAITING",
+                    "message", "Suche nach Gegner..."
+                ));
 
             return lobbyId;
         } else {
@@ -108,20 +113,29 @@ public class LobbyService {
         if (lobby == null) {
             System.out.println("DEBUG: Lobby not found for code: " + lobbyCode);
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
-                Map.of("error", "Lobby nicht gefunden"));
+                Map.of(
+                    "type", "LOBBY_ERROR",
+                    "error", "Lobby nicht gefunden"
+                ));
             return false;
         }
 
         if (lobby.isFull()) {
             System.out.println("DEBUG: Lobby is full");
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
-                Map.of("error", "Lobby ist bereits voll"));
+                Map.of(
+                    "type", "LOBBY_ERROR",
+                    "error", "Lobby ist bereits voll"
+                ));
             return false;
         }
 
         if (lobby.getStatus() != LobbyStatus.WAITING) {
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
-                Map.of("error", "Lobby ist nicht mehr verfügbar"));
+                Map.of(
+                    "type", "LOBBY_ERROR",
+                    "error", "Lobby ist nicht mehr verfügbar"
+                ));
             return false;
         }
 
@@ -191,26 +205,26 @@ public class LobbyService {
         // Farben zuweisen
         assignColors(lobby);
 
-        // Beide Spieler zum Lobby-Channel hinzufügen und Spiel starten
-        String lobbyChannel = "/topic/lobby/" + lobby.getLobbyId();
-
+        // GAME_START WebSocket Message an beide Spieler
         for (String playerId : lobby.getPlayers()) {
             messagingTemplate.convertAndSendToUser(playerId, "/queue/game-start", Map.of(
+                "type", "GAME_START",
                 "lobbyId", lobby.getLobbyId(),
                 "gameTime", lobby.getGameTime().name(),
                 "whitePlayer", lobby.getWhitePlayer(),
                 "blackPlayer", lobby.getBlackPlayer(),
-                "lobbyChannel", lobbyChannel
+                "lobbyChannel", "/topic/lobby/" + lobby.getLobbyId()
             ));
         }
 
-        // Spiel-Start Nachricht an Lobby-Channel
-        messagingTemplate.convertAndSend(lobbyChannel, Map.of(
+        // Zusätzlich an Lobby-Channel für andere Subscriber
+        messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId(), Map.of(
             "type", "GAME_START",
-            "players", lobby.getPlayers(),
+            "lobbyId", lobby.getLobbyId(),
+            "gameTime", lobby.getGameTime().name(),
             "whitePlayer", lobby.getWhitePlayer(),
             "blackPlayer", lobby.getBlackPlayer(),
-            "gameTime", lobby.getGameTime()
+            "players", lobby.getPlayers()
         ));
     }
 

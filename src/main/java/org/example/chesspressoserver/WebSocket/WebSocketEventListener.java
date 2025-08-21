@@ -68,7 +68,7 @@ public class WebSocketEventListener {
             } catch (Exception e) {
                 System.out.println("Error removing player " + playerName + " from lobby on disconnect: " + e.getMessage());
             }
-
+            
             // 2. Entferne den Spieler aus der Online-Liste
             onlinePlayerService.removePlayer(playerName);
             System.out.println("Player " + playerName + " disconnected from WebSocket - removed from online list");

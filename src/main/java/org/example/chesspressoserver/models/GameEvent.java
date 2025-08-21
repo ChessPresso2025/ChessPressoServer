@@ -28,7 +28,7 @@ public class GameEvent {
     private String type;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Column(nullable = false, columnDefinition = "json")
     private Map<String, Object> payload;
 
     @CreationTimestamp

@@ -90,6 +90,29 @@ public class JwtService {
         }
     }
 
+    public String getUsernameFromToken(String token) {
+        try {
+            SignedJWT signedJWT = SignedJWT.parse(token);
+
+            if (!signedJWT.verify(verifier)) {
+                throw new RuntimeException("Invalid JWT token signature");
+            }
+
+            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+
+            // Check expiration
+            if (claims.getExpirationTime().before(new Date())) {
+                throw new RuntimeException("JWT token has expired");
+            }
+
+            return claims.getStringClaim("uname");
+
+        } catch (ParseException | JOSEException e) {
+            System.err.println("Error parsing JWT token: " + e.getMessage());
+            throw new RuntimeException("Invalid JWT token", e);
+        }
+    }
+
     public boolean validateToken(String token) {
         try {
             getUserIdFromToken(token);

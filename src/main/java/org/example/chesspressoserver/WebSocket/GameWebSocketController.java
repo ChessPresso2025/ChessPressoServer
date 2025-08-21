@@ -68,4 +68,53 @@ public class GameWebSocketController {
         onlinePlayerService.updateHeartbeat(playerId);
         return "Player " + playerId + " wants to join game";
     }
+
+    @MessageMapping("/app-closing")
+    public void handleAppClosing(@Payload Map<String, Object> closingData, Principal principal) {
+        String playerId = null;
+        String reason = null;
+
+        // Versuche Player-ID aus dem Principal zu holen
+        if (principal != null && !principal.getName().equals("anonymous")) {
+            playerId = principal.getName();
+        }
+
+        // Fallback: Versuche Player-ID aus der Nachricht zu holen
+        if (playerId == null && closingData != null && closingData.containsKey("playerId")) {
+            playerId = (String) closingData.get("playerId");
+        }
+
+        // Extrahiere Grund für das Schließen
+        if (closingData != null && closingData.containsKey("reason")) {
+            reason = (String) closingData.get("reason");
+        }
+
+        if (playerId != null && !playerId.equals("anonymous")) {
+            onlinePlayerService.removePlayer(playerId);
+            System.out.println("App closing - Player " + playerId + " removed from online list. Reason: " + reason);
+
+            // Sofortige Aktualisierung der Online-Spieler-Liste mit Fehlerbehandlung
+            try {
+                Set<String> onlinePlayers = onlinePlayerService.getOnlinePlayers();
+                Map<String, Object> updateMessage = Map.of(
+                        "type", "players-update",
+                        "onlinePlayers", onlinePlayers,
+                        "playerCount", onlinePlayers.size()
+                );
+                messagingTemplate.convertAndSend("/topic/players", updateMessage);
+
+                System.out.println("Server-Status nach App-Schließung - " + onlinePlayers.size() + " Clients online: " + onlinePlayers);
+            } catch (Exception e) {
+                System.out.println("Error sending update after app closing: " + e.getMessage());
+            }
+        } else {
+            System.out.println("App closing message received but no valid playerId found");
+        }
+    }
+
+    @MessageMapping("/disconnect")
+    public void handleDisconnect(@Payload Map<String, Object> disconnectData, Principal principal) {
+        // Verwende die gleiche Logik wie bei app-closing
+        handleAppClosing(disconnectData, principal);
+    }
 }

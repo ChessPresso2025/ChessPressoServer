@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 public class OnlinePlayerService {
 
     private final Map<String, Instant> lastSeenMap = new ConcurrentHashMap<>();
-    private final Duration TIMEOUT = Duration.ofSeconds(90); // Erhöht auf 90 Sekunden - Client sendet alle 60 Sekunden
+    private final Duration TIMEOUT = Duration.ofSeconds(45); // Reduziert auf 45 Sekunden - Client sendet alle 30 Sekunden
 
     public void updateHeartbeat(String playerId) {
         if (playerId != null && !playerId.equals("anonymous")) {

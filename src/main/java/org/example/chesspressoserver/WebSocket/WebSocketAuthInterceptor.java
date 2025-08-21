@@ -37,16 +37,17 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             if (token != null) {
                 try {
                     UUID userId = jwtService.getUserIdFromToken(token);
+                    String username = jwtService.getUsernameFromToken(token);
 
-                    // Erstelle Authentifizierung nur mit userId
+                    // Erstelle Authentifizierung mit dem tatsächlichen Username
                     Authentication authentication = new UsernamePasswordAuthenticationToken(
-                        userId.toString(),
+                        username != null ? username : userId.toString(),
                         null,
                         Collections.emptyList()
                     );
 
                     accessor.setUser(authentication);
-                    System.out.println("WebSocket authentication successful for user: " + userId.toString());
+                    System.out.println("WebSocket authentication successful for user: " + (username != null ? username : userId.toString()));
 
                 } catch (Exception e) {
                     System.err.println("WebSocket JWT authentication failed: " + e.getMessage());

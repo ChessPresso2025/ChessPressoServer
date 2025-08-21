@@ -9,3 +9,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+# Logging-Konfiguration um harmlose WebSocket-Disconnect-Fehler zu reduzieren
+logging:
+  level:
+    org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator: WARN
+    org.apache.tomcat.websocket: WARN
+    org.apache.tomcat.util.net: WARN

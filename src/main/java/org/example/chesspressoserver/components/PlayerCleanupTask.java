@@ -13,7 +13,7 @@ public class PlayerCleanupTask {
         this.onlinePlayerService = onlinePlayerService;
     }
 
-    @Scheduled(fixedRate = 40000) // Alle 30 Sekunden
+    @Scheduled(fixedRate = 120000) // Alle 2 Minuten - angepasst an das neue 90-Sekunden-Timeout
     public void cleanupInactivePlayers() {
         onlinePlayerService.cleanup();
     }

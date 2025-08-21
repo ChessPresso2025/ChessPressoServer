@@ -3,7 +3,6 @@ package org.example.chesspressoserver.WebSocket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -73,7 +72,7 @@ public class SimpleWebSocketHandler extends TextWebSocketHandler {
     }
 
     // Server-zu-Client Broadcast alle 5 Sekunden
-    @Scheduled(fixedRate = 5000)
+    // @Scheduled(fixedRate = 5000) // Deaktiviert - wird nicht verwendet, da STOMP WebSocket benutzt wird
     public void broadcastServerStatus() {
         String statusMessage = "{\"type\":\"server_status\",\"status\":\"online\",\"timestamp\":" + System.currentTimeMillis() + "}";
 
@@ -91,6 +90,6 @@ public class SimpleWebSocketHandler extends TextWebSocketHandler {
             }
         });
 
-        System.out.println("Server-Status an " + sessions.size() + " Clients gesendet");
+        // System.out.println("Server-Status an " + sessions.size() + " Clients gesendet"); // Deaktiviert
     }
 }

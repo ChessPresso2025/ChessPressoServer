@@ -18,13 +18,35 @@ public class ConnectionStatusBroadcaster {
         this.onlinePlayerService = onlinePlayerService;
     }
 
-    @Scheduled(fixedRate = 5000)
+    @Scheduled(fixedRate = 5000) // Alle 5 Sekunden - korrigierte Frequenz
     public void broadcastConnectionStatus() {
-        Set<String> players = onlinePlayerService.getOnlinePlayers();
-        for (String playerId : players) {
-            simpMessagingTemplate.convertAndSendToUser(
-                    playerId, "/queue/status", Map.of("type", "connection-status", "status", "online")
+        Set<String> onlinePlayers = onlinePlayerService.getOnlinePlayers();
+
+        System.out.println("Server-Status an " + onlinePlayers.size() + " Clients gesendet: " + onlinePlayers);
+
+        // Sende die Liste aller Online-Spieler an jeden Online-Spieler
+        for (String playerId : onlinePlayers) {
+            Map<String, Object> connectionMessage = Map.of(
+                    "type", "connection-status",
+                    "status", "online",
+                    "onlinePlayers", onlinePlayers,
+                    "playerCount", onlinePlayers.size()
             );
+
+            simpMessagingTemplate.convertAndSendToUser(
+                    playerId, "/queue/status", connectionMessage
+            );
+        }
+
+        // Zusätzlich: Sende auch an das öffentliche Topic für alle Subscriber
+        if (!onlinePlayers.isEmpty()) {
+            Map<String, Object> publicMessage = Map.of(
+                    "type", "players-update",
+                    "onlinePlayers", onlinePlayers,
+                    "playerCount", onlinePlayers.size()
+            );
+
+            simpMessagingTemplate.convertAndSend("/topic/players", publicMessage);
         }
     }
 }

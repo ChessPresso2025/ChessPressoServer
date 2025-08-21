@@ -23,6 +23,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private JwtService jwtService;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+        // Lasse WebSocket-Verbindungen durch
+        return path.startsWith("/ws") || path.startsWith("/websocket");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                    FilterChain filterChain) throws ServletException, IOException {
 
@@ -43,8 +50,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             } catch (Exception e) {
                 System.err.println("Invalid JWT token: " + e.getMessage());
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
+                // Für WebSocket-Verbindungen nicht den Response blockieren
+                if (!request.getRequestURI().startsWith("/ws") && !request.getRequestURI().startsWith("/websocket")) {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
+                }
             }
         }
 

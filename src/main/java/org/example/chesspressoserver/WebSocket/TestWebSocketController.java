@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.example.chesspressoserver.service.LobbyCodeGenerator;
-import org.example.chesspressoserver.service.LobbyType;
+import org.example.chesspressoserver.models.Lobby.LobbyType;
 import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
@@ -59,11 +59,10 @@ public class TestWebSocketController {
             lobbyCode = lobbyCodeGenerator.generatePublicLobbyCode();
         }
 
-        LobbyCreatedResponse response = new LobbyCreatedResponse(
-            lobbyCode,
-            request.isPrivate() ? "private" : "public",
-            LocalDateTime.now().toString()
-        );
+        LobbyCreatedResponse response = new LobbyCreatedResponse();
+        response.setLobbyCode(lobbyCode);
+        response.setLobbyType(request.isPrivate() ? "private" : "public");
+        response.setTimestamp(LocalDateTime.now().toString());
 
         messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-created", response);
     }

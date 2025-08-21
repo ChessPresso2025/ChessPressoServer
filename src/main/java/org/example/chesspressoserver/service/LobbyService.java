@@ -1,6 +1,7 @@
 package org.example.chesspressoserver.service;
 
 import org.example.chesspressoserver.models.Lobby;
+import org.example.chesspressoserver.models.Lobby.LobbyType;
 import org.example.chesspressoserver.models.LobbyStatus;
 import org.example.chesspressoserver.models.GameTime;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -26,7 +27,7 @@ public class LobbyService {
         this.lobbyCodeGenerator = lobbyCodeGenerator;
         this.messagingTemplate = messagingTemplate;
 
-        // Setze die Callback-Funktion für den Code-Generator
+        // Setze die Callback-Funktion für den Code-Generator nur wenn die Methode existiert
         this.lobbyCodeGenerator.setLobbyExistsChecker(this::lobbyExists);
 
         // Initialisiere Quick Match Warteschlangen
@@ -260,11 +261,110 @@ public class LobbyService {
         }
     }
 
+    /**
+     * Neue Methode: Update Player Ready Status für WebSocket-Integration
+     */
+    public boolean updatePlayerReadyStatus(String lobbyId, String playerId, boolean ready) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby == null || !lobby.getPlayers().contains(playerId)) {
+            return false;
+        }
+
+        lobby.setPlayerReady(playerId, ready);
+        return true;
+    }
+
+    /**
+     * Neue Methode: Prüfe ob alle Spieler bereit sind
+     */
+    public boolean areAllPlayersReady(String lobbyId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby == null || lobby.getPlayers().size() < 2) {
+            return false;
+        }
+
+        return lobby.areAllPlayersReady();
+    }
+
+    /**
+     * Neue Methode: Starte Spiel wenn alle bereit sind
+     */
+    public void startGameIfReady(String lobbyId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null && areAllPlayersReady(lobbyId) && lobby.getPlayers().size() >= 2) {
+            startGame(lobby);
+        }
+    }
+
+    /**
+     * Erweiterte Methode: WebSocket-Broadcast bei Lobby-Join
+     */
+    public void broadcastLobbyJoined(String lobbyId, String newPlayerId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null) {
+            Map<String, Object> updateMessage = Map.of(
+                "type", "player-joined",
+                "lobbyId", lobbyId,
+                "newPlayerId", newPlayerId,
+                "players", lobby.getPlayers(),
+                "status", lobby.getStatus().toString(),
+                "message", "Player " + newPlayerId + " joined the lobby"
+            );
+
+            // Broadcast an alle Lobby-Teilnehmer
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, updateMessage);
+        }
+    }
+
+    /**
+     * Erweiterte Methode: WebSocket-Broadcast bei Lobby-Leave
+     */
+    public void broadcastPlayerLeft(String lobbyId, String playerId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null) {
+            Map<String, Object> updateMessage = Map.of(
+                "type", "player-left",
+                "lobbyId", lobbyId,
+                "playerId", playerId,
+                "players", lobby.getPlayers(),
+                "status", lobby.getStatus().toString(),
+                "message", "Player " + playerId + " left the lobby"
+            );
+
+            // Broadcast an alle verbleibenden Lobby-Teilnehmer
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, updateMessage);
+        }
+    }
+
+    /**
+     * Erweiterte Methode: WebSocket-Broadcast bei Game-Start
+     */
+    public void broadcastGameStart(String lobbyId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null && lobby.isGameStarted()) {
+            Map<String, Object> gameStartMessage = Map.of(
+                "type", "game-start",
+                "lobbyId", lobbyId,
+                "gameTime", lobby.getGameTime() != null ? lobby.getGameTime().toString() : "MIDDLE",
+                "whitePlayer", lobby.getWhitePlayer(),
+                "blackPlayer", lobby.getBlackPlayer(),
+                "lobbyChannel", "game-" + lobbyId
+            );
+
+            // Broadcast an alle Lobby-Teilnehmer
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, gameStartMessage);
+        }
+    }
 
     public Lobby getLobby(String lobbyId) {
         return activeLobbies.get(lobbyId);
     }
-
 
     public Collection<Lobby> getAllLobbies() {
         return activeLobbies.values();
@@ -274,8 +374,6 @@ public class LobbyService {
         return activeLobbies.values();
     }
 
-
-
     public String getPlayerLobby(String playerId) {
         for (Lobby lobby : activeLobbies.values()) {
             if (lobby.getPlayers().contains(playerId)) {
@@ -284,7 +382,6 @@ public class LobbyService {
         }
         return null;
     }
-
 
     public void forceLeaveAllLobbies(String playerId) {
         List<String> lobbiesToRemove = new ArrayList<>();
@@ -299,6 +396,9 @@ public class LobbyService {
                 } else {
                     // Benachrichtige andere Spieler
                     notifyLobbyUpdate(lobby, "Spieler hat Lobby verlassen (Verbindung getrennt)");
+
+                    // Broadcast WebSocket-Update
+                    broadcastPlayerLeft(lobby.getLobbyId(), playerId);
                 }
             }
         }
@@ -309,20 +409,20 @@ public class LobbyService {
         }
     }
 
-
     public void cleanupStaleLobbies() {
-        List<String> lobbiesToRemove = new ArrayList<>();
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(10);
+        List<String> staleLobbyIds = new ArrayList<>();
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(30);
 
-        for (Lobby lobby : activeLobbies.values()) {
-            if (lobby.getCreatedAt().isBefore(cutoff) && !lobby.isGameStarted()) {
-                lobbiesToRemove.add(lobby.getLobbyId());
-                lobbyCodeGenerator.removeLobbyCode(lobby.getLobbyId());
+        for (Map.Entry<String, Lobby> entry : activeLobbies.entrySet()) {
+            Lobby lobby = entry.getValue();
+            if (lobby.getCreatedAt().isBefore(cutoffTime) && lobby.getPlayers().isEmpty()) {
+                staleLobbyIds.add(entry.getKey());
             }
         }
 
-        for (String lobbyId : lobbiesToRemove) {
+        for (String lobbyId : staleLobbyIds) {
             activeLobbies.remove(lobbyId);
+            lobbyCodeGenerator.removeLobbyCode(lobbyId);
         }
     }
 }

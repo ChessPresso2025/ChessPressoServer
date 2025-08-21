@@ -53,11 +53,11 @@ public class WebSocketEventListener {
 
         if (user != null && !user.getName().equals("anonymous")) {
             String playerName = user.getName();
-
+            
             // Entferne den Spieler sofort aus der Liste
             onlinePlayerService.removePlayer(playerName);
             System.out.println("Player " + playerName + " disconnected from WebSocket - removed from online list");
-
+            
             // Verzögerte Aktualisierung um sicherzustellen, dass der Spieler vollständig entfernt wurde
             try {
                 // Kurze Verzögerung, um sicherzustellen, dass alle Cleanup-Operationen abgeschlossen sind

@@ -52,6 +52,10 @@ public class LobbyController {
 
         try {
             String lobbyId = lobbyService.joinQuickMatch(playerId, request.getGameTime());
+
+            // WebSocket-Broadcast nach erfolgreichem Join
+            lobbyService.broadcastLobbyJoined(lobbyId, playerId);
+
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "lobbyId", lobbyId,
@@ -120,6 +124,9 @@ public class LobbyController {
         boolean success = lobbyService.joinPrivateLobby(playerId, request.getLobbyCode());
 
         if (success) {
+            // WebSocket-Broadcast nach erfolgreichem Join
+            lobbyService.broadcastLobbyJoined(request.getLobbyCode(), playerId);
+
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "lobbyCode", request.getLobbyCode(),
@@ -137,6 +144,9 @@ public class LobbyController {
     @PostMapping("/leave")
     public ResponseEntity<?> leaveLobby(@RequestBody LeaveLobbyRequest request, Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";
+
+        // WebSocket-Broadcast vor dem Verlassen
+        lobbyService.broadcastPlayerLeft(request.getLobbyId(), playerId);
 
         lobbyService.leaveLobby(playerId, request.getLobbyId());
 

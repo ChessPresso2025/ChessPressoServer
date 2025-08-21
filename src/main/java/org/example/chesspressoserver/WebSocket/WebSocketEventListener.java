@@ -1,6 +1,7 @@
 package org.example.chesspressoserver.WebSocket;
 
 import org.example.chesspressoserver.components.ConnectionStatusBroadcaster;
+import org.example.chesspressoserver.service.LobbyService;
 import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -15,10 +16,12 @@ public class WebSocketEventListener {
 
     private final OnlinePlayerService onlinePlayerService;
     private final ConnectionStatusBroadcaster connectionStatusBroadcaster;
+    private final LobbyService lobbyService;
 
-    public WebSocketEventListener(OnlinePlayerService onlinePlayerService, ConnectionStatusBroadcaster connectionStatusBroadcaster) {
+    public WebSocketEventListener(OnlinePlayerService onlinePlayerService, ConnectionStatusBroadcaster connectionStatusBroadcaster, LobbyService lobbyService) {
         this.onlinePlayerService = onlinePlayerService;
         this.connectionStatusBroadcaster = connectionStatusBroadcaster;
+        this.lobbyService = lobbyService;
     }
 
     @EventListener
@@ -54,11 +57,23 @@ public class WebSocketEventListener {
         if (user != null && !user.getName().equals("anonymous")) {
             String playerName = user.getName();
             
-            // Entferne den Spieler sofort aus der Liste
+            // 1. Entferne den Spieler aus allen Lobbys
+            try {
+                String currentLobbyId = lobbyService.getPlayerLobby(playerName);
+                if (currentLobbyId != null) {
+                    System.out.println("Player " + playerName + " was in lobby " + currentLobbyId + " - removing from lobby due to disconnect");
+                    lobbyService.forceLeaveAllLobbies(playerName);
+                    System.out.println("Player " + playerName + " successfully removed from lobby " + currentLobbyId);
+                }
+            } catch (Exception e) {
+                System.out.println("Error removing player " + playerName + " from lobby on disconnect: " + e.getMessage());
+            }
+
+            // 2. Entferne den Spieler aus der Online-Liste
             onlinePlayerService.removePlayer(playerName);
             System.out.println("Player " + playerName + " disconnected from WebSocket - removed from online list");
             
-            // Verzögerte Aktualisierung um sicherzustellen, dass der Spieler vollständig entfernt wurde
+            // 3. Verzögerte Aktualisierung um sicherzustellen, dass der Spieler vollständig entfernt wurde
             try {
                 // Kurze Verzögerung, um sicherzustellen, dass alle Cleanup-Operationen abgeschlossen sind
                 Thread.sleep(100);

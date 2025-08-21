@@ -1,7 +1,6 @@
 package org.example.chesspressoserver.service;
 
 import org.example.chesspressoserver.models.Lobby;
-import org.example.chesspressoserver.models.Lobby.LobbyType;
 import org.example.chesspressoserver.models.LobbyStatus;
 import org.example.chesspressoserver.models.GameTime;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -48,7 +47,7 @@ public class LobbyService {
         if (queue.isEmpty()) {
             // Erster Spieler - erstelle neue Lobby und warte
             String lobbyId = lobbyCodeGenerator.generatePublicLobbyCode();
-            Lobby lobby = new Lobby(lobbyId, LobbyType.PUBLIC, playerId);
+            Lobby lobby = new Lobby(lobbyId, Lobby.LobbyType.PUBLIC, playerId);
             lobby.setGameTime(gameTime);
             activeLobbies.put(lobbyId, lobby);
             queue.offer(lobbyId);
@@ -93,7 +92,7 @@ public class LobbyService {
         }
 
         String lobbyCode = lobbyCodeGenerator.generatePrivateLobbyCode();
-        Lobby lobby = new Lobby(lobbyCode, LobbyType.PRIVATE, creatorId);
+        Lobby lobby = new Lobby(lobbyCode, Lobby.LobbyType.PRIVATE, creatorId);
         activeLobbies.put(lobbyCode, lobby);
 
 

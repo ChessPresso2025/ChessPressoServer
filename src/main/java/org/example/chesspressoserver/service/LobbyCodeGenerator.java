@@ -1,12 +1,12 @@
 package org.example.chesspressoserver.service;
 
 import lombok.Setter;
+import org.example.chesspressoserver.models.Lobby.LobbyType;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
-
 import java.util.function.Function;
 
 @Service
@@ -27,8 +27,10 @@ public class LobbyCodeGenerator {
         System.out.println("DEBUG: Generating new lobby code for type: " + lobbyType);
         System.out.println("DEBUG: Currently used codes: " + usedLobbyIds.size());
 
+        int codeLength = (lobbyType == LobbyType.PRIVATE) ? 6 : 12;
+
         do {
-            code = generateRandomCode(lobbyType.getCodeLength());
+            code = generateRandomCode(codeLength);
             System.out.println("DEBUG: Generated candidate code: " + code);
         } while (isCodeInUse(code));
 

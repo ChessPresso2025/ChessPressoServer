@@ -4,7 +4,7 @@ import org.example.chesspressoserver.models.gamemodels.Position;
 
 import java.util.List;
 
-public class MoveBishop implements PieceMove{
+public class MoveBishop extends PieceMove{
     @Override
     public List<Position> getPossibleMoves(Position start) {
         return List.of();

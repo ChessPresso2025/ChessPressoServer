@@ -6,7 +6,7 @@ import org.example.chesspressoserver.models.gamemodels.TeamColor;
 import java.util.List;
 
 @Getter
-public class MovePawn implements PieceMove {
+public class MovePawn extends PieceMove {
     private TeamColor color;
 
     //Construktor

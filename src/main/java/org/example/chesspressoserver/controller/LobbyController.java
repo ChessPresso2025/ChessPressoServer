@@ -26,7 +26,7 @@ public class LobbyController {
 
     @PostMapping("/quick-join")
     public ResponseEntity<?> quickJoin(@RequestBody QuickJoinRequest request, Principal principal, HttpServletRequest httpRequest) {
-        // Verwende Session-ID als eindeutige Spieler-ID falls kein Principal vorhanden
+        // Verwende Session-ID als eindeutige Spieler-ID falls keine vorhanden
         String playerId = principal != null ? principal.getName() :
                          httpRequest.getSession().getId();
 
@@ -38,9 +38,11 @@ public class LobbyController {
             // Prüfe ob die existierende Lobby noch aktiv und nicht im Spiel ist
             var lobby = lobbyService.getLobby(existingLobby);
             if (lobby != null && !lobby.isGameStarted()) {
-                // Spieler ist in einer wartenden Lobby - erlaube Quick Match nicht
+                // Spieler ist in einer wartenden Lobby - Frontend-konforme Error Response
                 return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
                     "error", "Du bist bereits in einer Lobby",
+                    "message", "Verlasse zuerst deine aktuelle Lobby",
                     "lobbyId", existingLobby
                 ));
             } else {
@@ -52,6 +54,7 @@ public class LobbyController {
 
         try {
             String lobbyId = lobbyService.joinQuickMatch(playerId, request.getGameTime());
+            
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "lobbyId", lobbyId,
@@ -60,7 +63,9 @@ public class LobbyController {
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
-                "error", "Fehler beim Quick Match: " + e.getMessage()
+                "success", false,
+                "error", "Fehler beim Quick Match: " + e.getMessage(),
+                "message", "Bitte versuche es erneut"
             ));
         }
     }
@@ -120,6 +125,9 @@ public class LobbyController {
         boolean success = lobbyService.joinPrivateLobby(playerId, request.getLobbyCode());
 
         if (success) {
+            // WebSocket-Broadcast nach erfolgreichem Join
+            lobbyService.broadcastLobbyJoined(request.getLobbyCode(), playerId);
+            
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "lobbyCode", request.getLobbyCode(),
@@ -138,6 +146,9 @@ public class LobbyController {
     public ResponseEntity<?> leaveLobby(@RequestBody LeaveLobbyRequest request, Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";
 
+        // WebSocket-Broadcast vor dem Verlassen
+        lobbyService.broadcastPlayerLeft(request.getLobbyId(), playerId);
+        
         lobbyService.leaveLobby(playerId, request.getLobbyId());
 
         return ResponseEntity.ok(Map.of(
@@ -167,9 +178,7 @@ public class LobbyController {
     }
 
 
-    /**
-     * Spieler aus allen Lobbys entfernen (Cleanup-Endpunkt)
-     */
+
     @PostMapping("/cleanup")
     public ResponseEntity<?> cleanupPlayer(Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";

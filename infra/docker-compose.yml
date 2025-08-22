@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16
+    container_name: chessapp-postgres
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"                          # wenn belegt -> "5433:5432"
+    volumes:
+      - appdb-data:/var/lib/postgresql/data  # PERSISTENZ
+      - ./init:/docker-entrypoint-initdb.d   # optional: SQL beim 1. Start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  appdb-data:

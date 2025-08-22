@@ -4,8 +4,12 @@ import org.example.chesspressoserver.service.OnlinePlayerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,11 +30,45 @@ class OnlinePlayerServiceTest {
     }
 
     @Test
-    void testCleanupRemovesExpiredPlayers() throws InterruptedException {
+    void testCleanupRemovesExpiredPlayers() throws Exception {
+        // Füge einen Spieler hinzu
         service.updateHeartbeat("expiredPlayer");
-        Thread.sleep(2100); // simulate 2s timeout (adjust timeout in service for real test)
+
+        // Verwende Reflection um das lastSeenMap direkt zu manipulieren
+        Field lastSeenMapField = OnlinePlayerService.class.getDeclaredField("lastSeenMap");
+        lastSeenMapField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, Instant> lastSeenMap = (Map<String, Instant>) lastSeenMapField.get(service);
+
+        // Setze den Zeitstempel auf eine Zeit vor 46 Sekunden (älter als das 45s Timeout)
+        lastSeenMap.put("expiredPlayer", Instant.now().minus(Duration.ofSeconds(46)));
+
+        // Führe cleanup aus
         service.cleanup();
+
+        // Überprüfe, dass der Spieler entfernt wurde
         Set<String> online = service.getOnlinePlayers();
         assertFalse(online.contains("expiredPlayer"));
+    }
+
+    @Test
+    void testIsPlayerOnlineReturnsTrueForActivePlayer() {
+        service.updateHeartbeat("activePlayer");
+        assertTrue(service.isPlayerOnline("activePlayer"));
+    }
+
+    @Test
+    void testIsPlayerOnlineReturnsFalseForAnonymous() {
+        assertFalse(service.isPlayerOnline("anonymous"));
+        assertFalse(service.isPlayerOnline(null));
+    }
+
+    @Test
+    void testRemovePlayer() {
+        service.updateHeartbeat("playerToRemove");
+        assertTrue(service.isPlayerOnline("playerToRemove"));
+
+        service.removePlayer("playerToRemove");
+        assertFalse(service.isPlayerOnline("playerToRemove"));
     }
 }

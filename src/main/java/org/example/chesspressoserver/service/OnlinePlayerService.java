@@ -13,10 +13,12 @@ import java.util.stream.Collectors;
 public class OnlinePlayerService {
 
     private final Map<String, Instant> lastSeenMap = new ConcurrentHashMap<>();
-    private final Duration TIMEOUT = Duration.ofSeconds(5);
+    private final Duration TIMEOUT = Duration.ofSeconds(45); // Reduziert auf 45 Sekunden - Client sendet alle 30 Sekunden
 
     public void updateHeartbeat(String playerId) {
-        lastSeenMap.put(playerId, Instant.now());
+        if (playerId != null && !playerId.equals("anonymous")) {
+            lastSeenMap.put(playerId, Instant.now());
+        }
     }
 
     public Set<String> getOnlinePlayers() {
@@ -27,8 +29,36 @@ public class OnlinePlayerService {
                 .collect(Collectors.toSet());
     }
 
+    public boolean isPlayerOnline(String playerId) {
+        if (playerId == null || playerId.equals("anonymous")) {
+            return false;
+        }
+        Instant lastSeen = lastSeenMap.get(playerId);
+        if (lastSeen == null) {
+            return false;
+        }
+        return Duration.between(lastSeen, Instant.now()).compareTo(TIMEOUT) < 0;
+    }
+
+    public void removePlayer(String playerId) {
+        lastSeenMap.remove(playerId);
+    }
+
     public void cleanup() {
         Instant now = Instant.now();
-        lastSeenMap.entrySet().removeIf(entry -> Duration.between(entry.getValue(), now).compareTo(TIMEOUT) < 0);
+        Set<String> playersToRemove = lastSeenMap.entrySet().stream()
+                .filter(entry -> Duration.between(entry.getValue(), now).compareTo(TIMEOUT) >= 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+        
+        playersToRemove.forEach(lastSeenMap::remove);
+        
+        if (!playersToRemove.isEmpty()) {
+            System.out.println("Removed inactive players: " + playersToRemove);
+        }
+    }
+
+    public int getOnlinePlayerCount() {
+        return getOnlinePlayers().size();
     }
 }

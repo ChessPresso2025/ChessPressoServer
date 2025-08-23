@@ -26,7 +26,7 @@ public class LobbyService {
         this.lobbyCodeGenerator = lobbyCodeGenerator;
         this.messagingTemplate = messagingTemplate;
 
-        // Setze die Callback-Funktion für den Code-Generator
+        // Setze die Callback-Funktion für den Code-Generator nur wenn die Methode existiert
         this.lobbyCodeGenerator.setLobbyExistsChecker(this::lobbyExists);
 
         // Initialisiere Quick Match Warteschlangen
@@ -35,9 +35,7 @@ public class LobbyService {
         }
     }
 
-    /**
-     * Prüft ob eine Lobby mit dem gegebenen Code existiert
-     */
+
     private boolean lobbyExists(String lobbyCode) {
         return activeLobbies.containsKey(lobbyCode);
     }
@@ -49,14 +47,19 @@ public class LobbyService {
         if (queue.isEmpty()) {
             // Erster Spieler - erstelle neue Lobby und warte
             String lobbyId = lobbyCodeGenerator.generatePublicLobbyCode();
-            Lobby lobby = new Lobby(lobbyId, LobbyType.PUBLIC, playerId);
+            Lobby lobby = new Lobby(lobbyId, Lobby.LobbyType.PUBLIC, playerId);
             lobby.setGameTime(gameTime);
             activeLobbies.put(lobbyId, lobby);
             queue.offer(lobbyId);
 
-            // Benachrichtige Spieler über Warten
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-waiting",
-                Map.of("lobbyId", lobbyId, "message", "Warte auf Gegner..."));
+            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-update",
+                Map.of(
+                    "type", "LOBBY_UPDATE",
+                    "lobbyId", lobbyId,
+                    "players", lobby.getPlayers(),
+                    "status", "WAITING",
+                    "message", "Suche nach Gegner..."
+                ));
 
             return lobbyId;
         } else {
@@ -80,24 +83,19 @@ public class LobbyService {
 
 
     public String createPrivateLobby(String creatorId) {
-        System.out.println("DEBUG: Creating private lobby for player: " + creatorId);
 
         // Prüfe erst, ob dieser Spieler bereits eine Lobby erstellt hat
         for (Lobby existingLobby : activeLobbies.values()) {
             if (existingLobby.getCreator().equals(creatorId) && existingLobby.isPrivate()) {
-                System.out.println("DEBUG: Player already has a private lobby: " + existingLobby.getLobbyId());
                 return existingLobby.getLobbyId(); // Gib die bestehende Lobby zurück
             }
         }
 
         String lobbyCode = lobbyCodeGenerator.generatePrivateLobbyCode();
-        Lobby lobby = new Lobby(lobbyCode, LobbyType.PRIVATE, creatorId);
+        Lobby lobby = new Lobby(lobbyCode, Lobby.LobbyType.PRIVATE, creatorId);
         activeLobbies.put(lobbyCode, lobby);
 
-        System.out.println("DEBUG: Created new lobby with code: " + lobbyCode);
-        System.out.println("DEBUG: Creator ID: " + creatorId);
-        System.out.println("DEBUG: Active lobbies count after creation: " + activeLobbies.size());
-        System.out.println("DEBUG: Lobby stored successfully: " + (activeLobbies.get(lobbyCode) != null));
+
 
         // Benachrichtige Creator
         messagingTemplate.convertAndSendToUser(creatorId, "/queue/lobby-created",
@@ -108,44 +106,43 @@ public class LobbyService {
 
 
     public boolean joinPrivateLobby(String playerId, String lobbyCode) {
-        System.out.println("DEBUG: Trying to join lobby with code: " + lobbyCode);
-        System.out.println("DEBUG: Player ID: " + playerId);
-        System.out.println("DEBUG: Active lobbies count: " + activeLobbies.size());
 
         Lobby lobby = activeLobbies.get(lobbyCode);
 
         if (lobby == null) {
             System.out.println("DEBUG: Lobby not found for code: " + lobbyCode);
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
-                Map.of("error", "Lobby nicht gefunden"));
+                Map.of(
+                    "type", "LOBBY_ERROR",
+                    "error", "Lobby nicht gefunden"
+                ));
             return false;
         }
-
-        System.out.println("DEBUG: Lobby found. Current players: " + lobby.getPlayers());
-        System.out.println("DEBUG: Lobby status: " + lobby.getStatus());
-        System.out.println("DEBUG: Is lobby full: " + lobby.isFull());
 
         if (lobby.isFull()) {
             System.out.println("DEBUG: Lobby is full");
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
-                Map.of("error", "Lobby ist bereits voll"));
+                Map.of(
+                    "type", "LOBBY_ERROR",
+                    "error", "Lobby ist bereits voll"
+                ));
             return false;
         }
 
         if (lobby.getStatus() != LobbyStatus.WAITING) {
-            System.out.println("DEBUG: Lobby status is not WAITING: " + lobby.getStatus());
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
-                Map.of("error", "Lobby ist nicht mehr verfügbar"));
+                Map.of(
+                    "type", "LOBBY_ERROR",
+                    "error", "Lobby ist nicht mehr verfügbar"
+                ));
             return false;
         }
 
         // Prüfe ob Spieler bereits in dieser Lobby ist
         if (lobby.getPlayers().contains(playerId)) {
-            System.out.println("DEBUG: Player already in this lobby");
             return true; // Spieler ist bereits in der Lobby
         }
 
-        System.out.println("DEBUG: Adding player to lobby");
         lobby.addPlayer(playerId);
         lobby.setStatus(LobbyStatus.FULL);
 
@@ -172,8 +169,6 @@ public class LobbyService {
             "isLobbyFull", true
         ));
 
-        System.out.println("DEBUG: Player successfully added. New player count: " + lobby.getPlayers().size());
-        System.out.println("DEBUG: Sent specific notifications to both players");
         return true;
     }
 
@@ -209,26 +204,26 @@ public class LobbyService {
         // Farben zuweisen
         assignColors(lobby);
 
-        // Beide Spieler zum Lobby-Channel hinzufügen und Spiel starten
-        String lobbyChannel = "/topic/lobby/" + lobby.getLobbyId();
-
+        // GAME_START WebSocket Message an beide Spieler
         for (String playerId : lobby.getPlayers()) {
             messagingTemplate.convertAndSendToUser(playerId, "/queue/game-start", Map.of(
+                "type", "GAME_START",
                 "lobbyId", lobby.getLobbyId(),
                 "gameTime", lobby.getGameTime().name(),
                 "whitePlayer", lobby.getWhitePlayer(),
                 "blackPlayer", lobby.getBlackPlayer(),
-                "lobbyChannel", lobbyChannel
+                "lobbyChannel", "/topic/lobby/" + lobby.getLobbyId()
             ));
         }
 
-        // Spiel-Start Nachricht an Lobby-Channel
-        messagingTemplate.convertAndSend(lobbyChannel, Map.of(
+        // Zusätzlich an Lobby-Channel für andere Subscriber
+        messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId(), Map.of(
             "type", "GAME_START",
-            "players", lobby.getPlayers(),
+            "lobbyId", lobby.getLobbyId(),
+            "gameTime", lobby.getGameTime().name(),
             "whitePlayer", lobby.getWhitePlayer(),
             "blackPlayer", lobby.getBlackPlayer(),
-            "gameTime", lobby.getGameTime()
+            "players", lobby.getPlayers()
         ));
     }
 
@@ -279,17 +274,118 @@ public class LobbyService {
         }
     }
 
+    /**
+     * Neue Methode: Update Player Ready Status für WebSocket-Integration
+     */
+    public boolean updatePlayerReadyStatus(String lobbyId, String playerId, boolean ready) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby == null || !lobby.getPlayers().contains(playerId)) {
+            return false;
+        }
+
+        lobby.setPlayerReady(playerId, ready);
+        return true;
+    }
+
+    /**
+     * Neue Methode: Prüfe ob alle Spieler bereit sind
+     */
+    public boolean areAllPlayersReady(String lobbyId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby == null || lobby.getPlayers().size() < 2) {
+            return false;
+        }
+
+        return lobby.areAllPlayersReady();
+    }
+
+    /**
+     * Neue Methode: Starte Spiel wenn alle bereit sind
+     */
+    public void startGameIfReady(String lobbyId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null && areAllPlayersReady(lobbyId) && lobby.getPlayers().size() >= 2) {
+            startGame(lobby);
+        }
+    }
+
+    /**
+     * Erweiterte Methode: WebSocket-Broadcast bei Lobby-Join
+     */
+    public void broadcastLobbyJoined(String lobbyId, String newPlayerId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null) {
+            Map<String, Object> updateMessage = Map.of(
+                "type", "player-joined",
+                "lobbyId", lobbyId,
+                "newPlayerId", newPlayerId,
+                "players", lobby.getPlayers(),
+                "status", lobby.getStatus().toString(),
+                "message", "Player " + newPlayerId + " joined the lobby"
+            );
+
+            // Broadcast an alle Lobby-Teilnehmer
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, updateMessage);
+        }
+    }
+
+    /**
+     * Erweiterte Methode: WebSocket-Broadcast bei Lobby-Leave
+     */
+    public void broadcastPlayerLeft(String lobbyId, String playerId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null) {
+            Map<String, Object> updateMessage = Map.of(
+                "type", "player-left",
+                "lobbyId", lobbyId,
+                "playerId", playerId,
+                "players", lobby.getPlayers(),
+                "status", lobby.getStatus().toString(),
+                "message", "Player " + playerId + " left the lobby"
+            );
+
+            // Broadcast an alle verbleibenden Lobby-Teilnehmer
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, updateMessage);
+        }
+    }
+
+    /**
+     * Erweiterte Methode: WebSocket-Broadcast bei Game-Start
+     */
+    public void broadcastGameStart(String lobbyId) {
+        Lobby lobby = activeLobbies.get(lobbyId);
+
+        if (lobby != null && lobby.isGameStarted()) {
+            Map<String, Object> gameStartMessage = Map.of(
+                "type", "game-start",
+                "lobbyId", lobbyId,
+                "gameTime", lobby.getGameTime() != null ? lobby.getGameTime().toString() : "MIDDLE",
+                "whitePlayer", lobby.getWhitePlayer(),
+                "blackPlayer", lobby.getBlackPlayer(),
+                "lobbyChannel", "game-" + lobbyId
+            );
+
+            // Broadcast an alle Lobby-Teilnehmer
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, gameStartMessage);
+        }
+    }
 
     public Lobby getLobby(String lobbyId) {
         return activeLobbies.get(lobbyId);
     }
 
-
     public Collection<Lobby> getAllLobbies() {
         return activeLobbies.values();
     }
 
-
+    public Collection<Lobby> getAllActiveLobbies() {
+        return activeLobbies.values();
+    }
 
     public String getPlayerLobby(String playerId) {
         for (Lobby lobby : activeLobbies.values()) {
@@ -299,7 +395,6 @@ public class LobbyService {
         }
         return null;
     }
-
 
     public void forceLeaveAllLobbies(String playerId) {
         List<String> lobbiesToRemove = new ArrayList<>();
@@ -314,6 +409,9 @@ public class LobbyService {
                 } else {
                     // Benachrichtige andere Spieler
                     notifyLobbyUpdate(lobby, "Spieler hat Lobby verlassen (Verbindung getrennt)");
+
+                    // Broadcast WebSocket-Update
+                    broadcastPlayerLeft(lobby.getLobbyId(), playerId);
                 }
             }
         }
@@ -324,22 +422,20 @@ public class LobbyService {
         }
     }
 
-    /**
-     * Räumt verwaiste Lobbys auf (älter als 10 Minuten ohne Aktivität)
-     */
     public void cleanupStaleLobbies() {
-        List<String> lobbiesToRemove = new ArrayList<>();
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(10);
+        List<String> staleLobbyIds = new ArrayList<>();
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(30);
 
-        for (Lobby lobby : activeLobbies.values()) {
-            if (lobby.getCreatedAt().isBefore(cutoff) && !lobby.isGameStarted()) {
-                lobbiesToRemove.add(lobby.getLobbyId());
-                lobbyCodeGenerator.removeLobbyCode(lobby.getLobbyId());
+        for (Map.Entry<String, Lobby> entry : activeLobbies.entrySet()) {
+            Lobby lobby = entry.getValue();
+            if (lobby.getCreatedAt().isBefore(cutoffTime) && lobby.getPlayers().isEmpty()) {
+                staleLobbyIds.add(entry.getKey());
             }
         }
 
-        for (String lobbyId : lobbiesToRemove) {
+        for (String lobbyId : staleLobbyIds) {
             activeLobbies.remove(lobbyId);
+            lobbyCodeGenerator.removeLobbyCode(lobbyId);
         }
     }
 }

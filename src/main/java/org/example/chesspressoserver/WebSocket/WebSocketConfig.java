@@ -1,7 +1,6 @@
 package org.example.chesspressoserver.WebSocket;
 
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -13,21 +12,30 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    @Autowired
-    private WebSocketUserInspector webSocketUserInspector;
+    private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+
+    public WebSocketConfig(WebSocketAuthInterceptor webSocketAuthInterceptor) {
+        this.webSocketAuthInterceptor = webSocketAuthInterceptor;
+    }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Hauptendpunkt für WebSocket-Verbindungen
+        // Vereinfachter Hauptendpunkt ohne SockJS für bessere Kompatibilität
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                .withSockJS();
-        
-        // Zusätzlicher Endpunkt ohne SockJS für native WebSocket-Clients
-        registry.addEndpoint("/websocket")
-                .setAllowedOriginPatterns("*");
-    }
+                .addInterceptors(new WebSocketHandshakeInterceptor());
 
+        // SockJS-Endpoint mit korrekter Konfiguration
+        registry.addEndpoint("/ws-sockjs")
+                .setAllowedOriginPatterns("*")
+                .withSockJS()
+                .setInterceptors(new WebSocketHandshakeInterceptor());
+
+        // Zusätzlicher nativer WebSocket-Endpoint
+        registry.addEndpoint("/websocket")
+                .setAllowedOriginPatterns("*")
+                .addInterceptors(new WebSocketHandshakeInterceptor());
+    }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
@@ -38,8 +46,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Prefix für benutzerspezifische Nachrichten
         registry.setUserDestinationPrefix("/user");
     }
-     @Override
+
+    @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(webSocketUserInspector);
-     }
+        registration.interceptors(webSocketAuthInterceptor);
+    }
 }

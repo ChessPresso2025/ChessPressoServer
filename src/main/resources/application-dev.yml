@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/appdb   # bei Port 5433 hier anpassen
+    username: app
+    password: ${DB_PASSWORD} #kommt aus Env
+  jpa:
+    show-sql: true
+    properties:
+      hibernate.format_sql: true
+
+# JWT Configuration
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: 1800000  # 30 minutes in milliseconds

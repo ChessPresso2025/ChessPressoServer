@@ -21,21 +21,22 @@ public class Board {
         cells[row][col] = null;
     }
 
+    public boolean checkEmpty(int row, int col) {
+        return cells[row][col] == null;
+    }
+
     public Position getKingPosition(TeamColor teamColor) {
-        int row = 0;
-        int collum = 0;
-        ChessPiece king = new ChessPiece(PieceType.KING, teamColor);
-        for (int i = 0; i < 8; i++) {
-            for (int j = 0; j < 8; j++) {
-                if (cells[i][j] == king) {
-                    row = i;
-                    collum = j;
-                     break;
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                ChessPiece p = cells[row][col];
+                if (p != null
+                        && p.getType() == PieceType.KING
+                        && p.getColour() == teamColor) {
+                    return new Position(col, row);
                 }
             }
         }
-        Position pos = new Position(row, collum);
-        return pos;
+        return null;
     }
 
     public void start() {

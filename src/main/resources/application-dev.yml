@@ -1,8 +1,12 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/appdb   # bei Port 5433 hier anpassen
+    url: jdbc:postgresql://127.0.0.1:5433/appdb?ssl=false&sslmode=disable&tcpKeepAlive=true&connectTimeout=30&loginTimeout=10
     username: app
-    password: ${DB_PASSWORD} #kommt aus Env
+    password: dockWord123
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
   jpa:
     show-sql: true
     properties:
@@ -12,4 +16,4 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET}
-    expiration: 1800000  # 30 minutes in milliseconds
+    expiration: 10800000  # 30 minutes in milliseconds, during dev to 3 hours incremented

@@ -8,6 +8,9 @@ target/
 
 # Local env file
 infra/.env
+#spezifizieren den Port
+application-dev.yml
+docker-compose.yml
 
 ### STS ###
 .apt_generated

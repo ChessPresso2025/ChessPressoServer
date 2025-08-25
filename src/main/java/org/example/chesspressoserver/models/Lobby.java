@@ -23,6 +23,7 @@ public class Lobby {
     private GameTime gameTime;
     private List<String> players;
     private String creator;
+    // Explizite Getter für boolean-Felder
     private boolean gameStarted; // Entferne "is" Prefix für bessere Lombok-Kompatibilität
     private LocalDateTime createdAt;
     private LobbyStatus status;
@@ -47,15 +48,6 @@ public class Lobby {
         this.randomColors = false;
         this.playerReadyStatus = new HashMap<>();
         this.playerReadyStatus.put(creator, false);
-    }
-
-    // Explizite Getter für boolean-Felder
-    public boolean isGameStarted() {
-        return gameStarted;
-    }
-
-    public void setGameStarted(boolean gameStarted) {
-        this.gameStarted = gameStarted;
     }
 
     public boolean isFull() {

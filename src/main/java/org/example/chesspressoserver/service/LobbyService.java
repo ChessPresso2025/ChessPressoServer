@@ -5,6 +5,8 @@ import org.example.chesspressoserver.models.LobbyStatus;
 import org.example.chesspressoserver.models.GameTime;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,6 +14,7 @@ import java.time.LocalDateTime;
 
 @Service
 public class LobbyService {
+    private static final Logger logger = LoggerFactory.getLogger(LobbyService.class);
 
     private final LobbyCodeGenerator lobbyCodeGenerator;
     private final SimpMessagingTemplate messagingTemplate;
@@ -244,19 +247,52 @@ public class LobbyService {
 
 
     public void leaveLobby(String playerId, String lobbyId) {
+        logger.info("Received leave request - Player: {}, Lobby: {}", playerId, lobbyId);
+
         Lobby lobby = activeLobbies.get(lobbyId);
 
-        if (lobby != null) {
-            lobby.removePlayer(playerId);
+        if (lobby == null) {
+            logger.warn("Leave request failed - Lobby not found: {}", lobbyId);
+            throw new IllegalArgumentException("Lobby nicht gefunden");
+        }
 
-            if (lobby.getPlayers().isEmpty()) {
-                // Lobby schließen
-                activeLobbies.remove(lobbyId);
-                lobbyCodeGenerator.removeLobbyCode(lobbyId);
-            } else {
-                // Andere Spieler benachrichtigen
-                notifyLobbyUpdate(lobby, "Spieler hat Lobby verlassen");
-            }
+        if (!lobby.getPlayers().contains(playerId)) {
+            logger.warn("Leave request failed - Player {} not in lobby {}", playerId, lobbyId);
+            throw new IllegalArgumentException("Spieler ist nicht in dieser Lobby");
+        }
+
+        boolean wasCreator = playerId.equals(lobby.getCreator());
+        boolean wasInGame = lobby.isGameStarted();
+
+        logger.debug("Leave context - wasCreator: {}, wasInGame: {}, playerCount: {}",
+            wasCreator, wasInGame, lobby.getPlayers().size());
+
+        // Entferne den Spieler
+        lobby.removePlayer(playerId);
+
+        if (wasInGame) {
+            // Wenn das Spiel läuft, setze es zurück
+            lobby.setGameStarted(false);
+            logger.info("Game ended due to player leave - Lobby: {}", lobbyId);
+        }
+
+        if (lobby.getPlayers().isEmpty() || wasCreator) {
+            // Wenn kein Spieler mehr da ist oder der Creator geht, schließe die Lobby
+            activeLobbies.remove(lobbyId);
+            lobbyCodeGenerator.removeLobbyCode(lobbyId);
+            // Informiere alle über die Schließung der Lobby
+            broadcastLobbyRemoved(lobbyId);
+            logger.info("Lobby closed - Empty: {}, Creator left: {}, Lobby: {}",
+                lobby.getPlayers().isEmpty(), wasCreator, lobbyId);
+        } else {
+            // Setze Status auf WAITING und benachrichtige verbleibende Spieler
+            lobby.setStatus(LobbyStatus.WAITING);
+            String message = wasInGame ?
+                "Spieler hat während des Spiels verlassen - Spiel wurde beendet" :
+                "Spieler hat Lobby verlassen";
+            notifyLobbyUpdate(lobby, message);
+            logger.info("Player left but lobby continues - Lobby: {}, Remaining players: {}",
+                lobbyId, lobby.getPlayers().size());
         }
     }
 
@@ -437,5 +473,57 @@ public class LobbyService {
             activeLobbies.remove(lobbyId);
             lobbyCodeGenerator.removeLobbyCode(lobbyId);
         }
+    }
+
+    public void removePlayerFromActiveLobby(String playerId) {
+        // Suche nach Lobbys, in denen der Spieler sich befindet
+        activeLobbies.values().stream()
+                .filter(lobby -> lobby.getPlayers().contains(playerId))
+                .findFirst()
+                .ifPresent(lobby -> {
+                    // Wenn der Creator die Lobby verlässt, entferne die gesamte Lobby
+                    if (lobby.getCreator().equals(playerId)) {
+                        String lobbyId = lobby.getLobbyId();
+                        activeLobbies.remove(lobbyId);
+                        // Benachrichtige alle anderen Spieler
+                        lobby.getPlayers().stream()
+                            .filter(player -> !player.equals(playerId))
+                            .forEach(player -> 
+                                messagingTemplate.convertAndSendToUser(
+                                    player,
+                                    "/queue/lobby-updates",
+                                    Map.of("type", "LOBBY_CLOSED", "message", "Creator left the lobby")
+                                )
+                            );
+                    } else {
+                        // Wenn ein anderer Spieler die Lobby verlässt
+                        lobby.removePlayer(playerId);
+                        lobby.setStatus(LobbyStatus.WAITING);
+                        
+                        // Benachrichtige den Creator
+                        messagingTemplate.convertAndSendToUser(
+                            lobby.getCreator(),
+                            "/queue/lobby-updates",
+                            Map.of("type", "PLAYER_LEFT", "message", "Player left the lobby")
+                        );
+                    }
+                });
+    }
+
+    /**
+     * Broadcast an alle, wenn eine Lobby entfernt wurde
+     */
+    private void broadcastLobbyRemoved(String lobbyId) {
+        Map<String, Object> message = Map.of(
+            "type", "LOBBY_REMOVED",
+            "lobbyId", lobbyId,
+            "message", "Die Lobby wurde geschlossen"
+        );
+
+        // Broadcast an den allgemeinen Lobby-Topic
+        messagingTemplate.convertAndSend("/topic/lobbies", message);
+
+        // Broadcast an den spezifischen Lobby-Topic
+        messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, message);
     }
 }

@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/ws/**").permitAll()  // WebSocket endpoints erlauben
                 .requestMatchers("/websocket/**").permitAll()  // Alternative WebSocket endpoints
                 .requestMatchers("/api/public/**").permitAll()
+                .requestMatchers("/api/lobby/**").permitAll()  // Lobby-API-Endpunkte erlauben
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/favicon.ico").permitAll()
                 .anyRequest().authenticated()

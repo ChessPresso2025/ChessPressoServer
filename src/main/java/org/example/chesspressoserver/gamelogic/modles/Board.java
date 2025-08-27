@@ -5,7 +5,7 @@ import org.example.chesspressoserver.models.gamemodels.PieceType;
 import org.example.chesspressoserver.models.gamemodels.Position;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;
 
-class Board {
+public class Board {
     private ChessPiece[][] cells = new ChessPiece[8][8];
 
     public ChessPiece getPiece(int row, int col) {
@@ -21,21 +21,22 @@ class Board {
         cells[row][col] = null;
     }
 
+    public boolean checkEmpty(int row, int col) {
+        return cells[row][col] == null;
+    }
+
     public Position getKingPosition(TeamColor teamColor) {
-        int row = 0;
-        int collum = 0;
-        ChessPiece king = new ChessPiece(PieceType.KING, teamColor);
-        for (int i = 0; i < 8; i++) {
-            for (int j = 0; j < 8; j++) {
-                if (cells[i][j] == king) {
-                    row = i;
-                    collum = j;
-                     break;
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                ChessPiece p = cells[row][col];
+                if (p != null
+                        && p.getType() == PieceType.KING
+                        && p.getColour() == teamColor) {
+                    return new Position(col, row);
                 }
             }
         }
-        Position pos = new Position(row, collum);
-        return pos;
+        return null;
     }
 
     public void start() {
@@ -54,14 +55,14 @@ class Board {
         ChessPiece B_K = new ChessPiece(PieceType.KING, TeamColor.BLACK);
 
         cells = new ChessPiece[][]{
-                {W_R, W_N, W_B, W_Q, W_K, W_B, W_N, W_R},           // A
-                {W_P, W_P, W_P, W_P, W_P, W_P, W_P, W_P},           // B
-                {null, null, null, null, null, null, null, null},   // C
-                {null, null, null, null, null, null, null, null},   // D
-                {null, null, null, null, null, null, null, null},   // E
-                {null, null, null, null, null, null, null, null},   // F
-                {B_P, B_P, B_P, B_P, B_P, B_P, B_P, B_P},           // G
-                {B_R, B_N, B_B, B_Q, B_K, B_B, B_N, B_R}            // H
+                {W_R, W_N, W_B, W_Q, W_K, W_B, W_N, W_R},
+                {W_P, W_P, W_P, W_P, W_P, W_P, W_P, W_P},
+                {null, null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null, null},
+                {B_P, B_P, B_P, B_P, B_P, B_P, B_P, B_P},
+                {B_R, B_N, B_B, B_Q, B_K, B_B, B_N, B_R}
         };
 
     }

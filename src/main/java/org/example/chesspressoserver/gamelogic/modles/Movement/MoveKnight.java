@@ -1,5 +1,6 @@
-package org.example.chesspressoserver.gamelogic.modles;
+package org.example.chesspressoserver.gamelogic.modles.Movement;
 
+import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.models.gamemodels.ChessPiece;
 import org.example.chesspressoserver.models.gamemodels.Position;
 
@@ -8,7 +9,7 @@ import java.util.List;
 
 public class MoveKnight extends PieceMove {
     @Override
-    public List<Position> getPossibleMoves(Position start) {
+    public List<Position> getPossibleMoves(Position start, Board board) {
         List<Position> possibleMoves = new ArrayList<>();
 
         int x = start.getX();

@@ -1,7 +1,7 @@
 package org.example.chesspressoserver.models.gamemodels;
 
 import lombok.Getter;
-import org.example.chesspressoserver.gamelogic.modles.*;
+import org.example.chesspressoserver.gamelogic.modles.Movement.*;
 
 @Getter
 public class ChessPiece {

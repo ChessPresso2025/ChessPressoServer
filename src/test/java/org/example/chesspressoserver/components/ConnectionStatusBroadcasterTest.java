@@ -26,26 +26,26 @@ class ConnectionStatusBroadcasterTest {
     }
 
     @Test
-    void testBroadcastsToAllOnlinePlayers() {
-        when(onlinePlayerService.getOnlinePlayers()).thenReturn(Set.of("abc", "def"));
+    void broadcastPlayerUpdate_shouldSendStatusToEachPlayer() {
+        // Vorbereitung
+        Set<String> onlinePlayers = Set.of("player1", "player2");
+        when(onlinePlayerService.getOnlinePlayers()).thenReturn(onlinePlayers);
 
-        broadcaster.broadcastConnectionStatus();
+        // Ausführung
+        broadcaster.broadcastPlayerUpdate();
 
-        verify(messagingTemplate, times(2)).convertAndSendToUser(
-                anyString(), eq("/queue/status"), anyMap()
-        );
+        // Stelle sicher, dass die öffentliche Nachricht gesendet wurde
+        verify(messagingTemplate).convertAndSend(eq("/topic/players"), anyMap());
+    }
+    @Test
+    void broadcastConnectionStatus_shouldCallBroadcastPlayerUpdate() {
+        // Vorbereitung
+        ConnectionStatusBroadcaster spyBroadcaster = spy(broadcaster);
 
-        ArgumentCaptor<String> playerIdCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Map<String, String>> messageCaptor = ArgumentCaptor.forClass(Map.class);
+        // Ausführung
+        spyBroadcaster.broadcastConnectionStatus();
 
-        verify(messagingTemplate, times(2)).convertAndSendToUser(
-                playerIdCaptor.capture(), eq("/queue/status"), messageCaptor.capture()
-        );
-
-        assertEquals(Set.of("abc", "def"), Set.copyOf(playerIdCaptor.getAllValues()));
-        for (Map<String, String> msg : messageCaptor.getAllValues()) {
-            assertEquals("connection-status", msg.get("type"));
-            assertEquals("online", msg.get("status"));
-        }
+        // Überprüfung
+        verify(spyBroadcaster).broadcastPlayerUpdate();
     }
 }

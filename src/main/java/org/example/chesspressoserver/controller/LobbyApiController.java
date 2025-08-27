@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/lobby")
@@ -147,6 +148,35 @@ public class LobbyApiController {
             errorResponse.put("error", "Fehler beim Abrufen der Statistiken: " + e.getMessage());
             errorResponse.put("timestamp", java.time.LocalDateTime.now());
             return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+
+    // http://localhost:8080/api/lobby/leave
+
+    @PostMapping("/leave")
+    public ResponseEntity<?> leaveLobby(@RequestBody Map<String, String> request, Principal principal) {
+        try {
+            String lobbyId = request.get("lobbyId");
+            String playerId = principal.getName();
+
+            if (lobbyId == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", "LobbyId muss angegeben werden"
+                ));
+            }
+
+            lobbyService.leaveLobby(playerId, lobbyId);
+
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Lobby erfolgreich verlassen"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                "success", false,
+                "error", "Fehler beim Verlassen der Lobby: " + e.getMessage()
+            ));
         }
     }
 }

@@ -26,6 +26,15 @@ public class GameController {
     @Setter
     private Move lastMove;
 
+    // Konstruktor
+    public GameController() {
+        this.board = new Board();
+        this.aktiveTeam = TeamColor.WHITE;
+        this.castlingRights = new CastlingRights();
+        this.lastMove = null;
+        board.start();
+    }
+
     // =====================================================================
     // 1) REQUEST: alle LEGALEN Züge für die Figur an startPos
     // =====================================================================

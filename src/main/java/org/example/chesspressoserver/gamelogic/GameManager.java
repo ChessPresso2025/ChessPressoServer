@@ -1,5 +1,6 @@
 package org.example.chesspressoserver.gamelogic;
 
+import org.example.chesspressoserver.controller.GameMessageController;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -7,13 +8,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class GameManager {
-    private final Map<String, GameController> games = new ConcurrentHashMap<>();
+    private final Map<String, GameMessageController> games = new ConcurrentHashMap<>();
 
     public void startGame(String lobbyId) {
-        games.put(lobbyId, new GameController());
+        games.put(lobbyId, new GameMessageController(
+            new GameController(), null
+        ));
     }
 
-    public GameController getGameByLobby(String lobbyId) {
+    public GameMessageController getGameByLobby(String lobbyId) {
         return games.get(lobbyId);
     }
 
@@ -27,7 +30,9 @@ public class GameManager {
 
     public boolean rematch(String lobbyId) {
         if (games.containsKey(lobbyId)) {
-            games.put(lobbyId, new GameController());
+            games.put(lobbyId, new GameMessageController(
+                new GameController(), null
+            ));
             return true;
         }
         return false;

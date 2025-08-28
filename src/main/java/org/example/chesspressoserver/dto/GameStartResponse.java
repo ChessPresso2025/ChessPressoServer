@@ -16,7 +16,7 @@ public class GameStartResponse {
     private String whitePlayer;
     private String blackPlayer;
     private String lobbyChannel;
-    private Map<String, Object> board; // PieceInfo später ersetzen
+    private Map<String, PieceInfo> board; // PieceInfo später ersetzen
     private String error;
 }
 

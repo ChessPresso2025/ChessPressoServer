@@ -20,6 +20,7 @@ import java.util.Map;
 
 @Controller
 public class GameMessageController {
+    @Getter
     private final GameController gameController;
     private final SimpMessagingTemplate messagingTemplate;
 

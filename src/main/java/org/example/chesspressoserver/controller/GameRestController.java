@@ -1,7 +1,14 @@
 package org.example.chesspressoserver.controller;
 
 import org.example.chesspressoserver.dto.GameStartResponse;
+import org.example.chesspressoserver.dto.PieceInfo;
+import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
+import org.example.chesspressoserver.gamelogic.modles.Board;
+import org.example.chesspressoserver.models.gamemodels.ChessPiece;
+import org.example.chesspressoserver.models.gamemodels.PieceType;
+import org.example.chesspressoserver.models.gamemodels.Position;
+import org.example.chesspressoserver.models.gamemodels.TeamColor;
 import org.example.chesspressoserver.models.requests.RematchRequest;
 import org.example.chesspressoserver.models.requests.ResignGameRequest;
 import org.example.chesspressoserver.models.requests.StartGameRequest;
@@ -83,7 +90,8 @@ public class GameRestController {
                 "gameTime", request.getGameTime(),
                 "whitePlayer", whitePlayer ,
                 "blackPlayer", blackPlayer ,
-                "randomPlayers", request.isRandomPlayers()
+                "randomPlayers", request.isRandomPlayers(),
+                "board", getBoardForLobby(request.getLobbyId())
             )
         );
         // GameStartResponse zurückgeben
@@ -94,9 +102,28 @@ public class GameRestController {
             whitePlayer,
             blackPlayer,
             "/topic/lobby/" + request.getLobbyId(),
-            new HashMap<>(), // board bleibt vorerst leer
+            getBoardForLobby(request.getLobbyId()),
             null
         );
+    }
+
+    private Map<String, PieceInfo> getBoardForLobby(String lobbyId) {
+        GameMessageController gameController = gameManager.getGameByLobby(lobbyId);
+        Map<String, PieceInfo> boardMap = new HashMap<>();
+        if (gameController == null) return boardMap;
+       Board board = gameController.getGameController().getBoard();
+        for (int x = 0; x < 8; x++) {
+            for (int y = 0; y < 8; y++) {
+                Position pos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y,x);
+                if (piece != null) {
+                    boardMap.put(pos.toString(), new PieceInfo(piece.getType(), piece.getColour()));
+                } else {
+                    boardMap.put(pos.toString(), new PieceInfo(PieceType.NULL, TeamColor.NULL));
+                }
+            }
+        }
+        return boardMap;
     }
 
     @PostMapping("/resign")

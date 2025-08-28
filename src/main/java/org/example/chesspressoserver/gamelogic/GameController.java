@@ -5,10 +5,12 @@ import lombok.Setter;
 import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.gamelogic.modles.CastlingRights;
 import org.example.chesspressoserver.models.gamemodels.*;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Service
 @Getter
 public class GameController {
 
@@ -304,7 +306,7 @@ public class GameController {
     }
 
     // true, wenn 'sq' von 'attacker' angegriffen wird (Bauern: NUR Diagonalen).
-    private boolean isSquareAttackedBy(TeamColor attacker, Position sq) {
+    public boolean isSquareAttackedBy(TeamColor attacker, Position sq) {
         int sx = sq.getX(), sy = sq.getY();
 
         // Pawn (diagonals only)

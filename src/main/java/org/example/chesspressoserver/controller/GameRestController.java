@@ -1,41 +1,102 @@
 package org.example.chesspressoserver.controller;
 
+import org.example.chesspressoserver.dto.GameStartResponse;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.models.requests.RematchRequest;
 import org.example.chesspressoserver.models.requests.ResignGameRequest;
 import org.example.chesspressoserver.models.requests.StartGameRequest;
+import org.example.chesspressoserver.service.LobbyService;
+import org.example.chesspressoserver.models.Lobby;
+import org.example.chesspressoserver.models.GameTime;
+import org.example.chesspressoserver.models.LobbyStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-@RestController
-@RequestMapping("/game")
+@Controller
 public class GameRestController {
 
     private final GameManager gameManager;
     private final SimpMessagingTemplate messagingTemplate;
+    private final LobbyService lobbyService;
 
     @Autowired
-    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate) {
+    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
+        this.lobbyService = lobbyService;
     }
 
-    @PostMapping("/start")
-    public ResponseEntity<?> startGame(@RequestBody StartGameRequest request) {
+    @MessageMapping("/game/start")
+    @SendTo("/topic/game/start/response")
+    public GameStartResponse startGame(StartGameRequest request) {
+        System.out.println("Received start request: " + request);
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
-            return ResponseEntity.badRequest().body("Lobby-ID fehlt");
+            return new GameStartResponse(false, null, null, null, null, "", null, "Lobby-ID fehlt");
         }
+        Lobby lobby = lobbyService.getLobby(request.getLobbyId());
+        if (lobby == null) {
+            return new GameStartResponse(false, request.getLobbyId(), null, null, null, "/topic/lobby/" + request.getLobbyId(), null, "Lobby nicht gefunden");
+        }
+        // gameTime als Enum setzen, falls nötig
+        if (request.getGameTime() != null) {
+            try {
+                lobby.setGameTime(GameTime.valueOf(request.getGameTime()));
+            } catch (IllegalArgumentException e) {
+                return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(), null, null, "/topic/lobby/" + request.getLobbyId(), null, "Ungültige Spielzeit");
+            }
+        }
+        lobby.setRandomColors(request.isRandomPlayers());
+        String whitePlayer = request.getWhitePlayer();
+        String blackPlayer = request.getBlackPlayer();
+        if (request.isRandomPlayers()) {
+            List<String> players = lobby.getPlayers();
+            if (players == null || players.size() != 2) {
+                return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(), null, null, "/topic/lobby/" + request.getLobbyId(), null, "Es müssen genau zwei Spieler in der Lobby sein, um die Farben zufällig zuzuweisen.");
+            }
+            List<String> shuffled = new ArrayList<>(players);
+            java.util.Collections.shuffle(shuffled);
+            whitePlayer = shuffled.get(0);
+            blackPlayer = shuffled.get(1);
+        }
+        lobby.setWhitePlayer(whitePlayer);
+        lobby.setBlackPlayer(blackPlayer);
+        lobby.setGameStarted(true);
+        lobby.setStatus(LobbyStatus.IN_GAME);
         gameManager.startGame(request.getLobbyId());
         // WebSocket-Benachrichtigung an alle Clients der Lobby
         messagingTemplate.convertAndSend(
             "/topic/lobby/" + request.getLobbyId(),
-            Map.of("type", "gameStarted", "lobbyId", request.getLobbyId())
+            Map.of(
+                "type", "gameStarted",
+                "success", true,
+                "lobbyId", request.getLobbyId() ,
+                "gameTime", request.getGameTime(),
+                "whitePlayer", whitePlayer ,
+                "blackPlayer", blackPlayer ,
+                "randomPlayers", request.isRandomPlayers()
+            )
         );
-        return ResponseEntity.ok().body("Game started for Lobby-ID: " + request.getLobbyId());
+        // GameStartResponse zurückgeben
+        return new GameStartResponse(
+            true,
+            request.getLobbyId(),
+            request.getGameTime(),
+            whitePlayer,
+            blackPlayer,
+            "/topic/lobby/" + request.getLobbyId(),
+            new HashMap<>(), // board bleibt vorerst leer
+            null
+        );
     }
 
     @PostMapping("/resign")

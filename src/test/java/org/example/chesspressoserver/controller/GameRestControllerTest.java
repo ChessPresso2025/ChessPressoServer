@@ -53,7 +53,6 @@ class GameRestControllerTest {
 
         StartGameRequest request = new StartGameRequest();
         request.setLobbyId(lobbyId);
-        request.setPlayerId("host");
 
         mockMvc.perform(post("/game/start")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -72,7 +71,6 @@ class GameRestControllerTest {
     @Test
     void startGame_missingLobbyId_returnsBadRequest() throws Exception {
         StartGameRequest request = new StartGameRequest();
-        request.setPlayerId("host");
         mockMvc.perform(post("/game/start")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))

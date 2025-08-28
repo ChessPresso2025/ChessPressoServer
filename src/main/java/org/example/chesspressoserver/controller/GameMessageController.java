@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.web.bind.annotation.PostMapping;
 
 import java.util.HashMap;
 import java.util.List;
@@ -36,25 +37,19 @@ public class GameMessageController {
 
     @MessageMapping("/game/move")
     public void handleMove(@Payload MoveRequest moveRequest) {
-        // Führe den Zug aus
+        // Sende zuerst das aktive Team
+        messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
+
         Position start = new Position(moveRequest.getFrom());
         Position end = new Position(moveRequest.getTo());
         PieceType promotionType = moveRequest.getPromotionType() != null ?
             PieceType.valueOf(moveRequest.getPromotionType()) : null;
+
         Move move = gameController.applyMove(start, end, promotionType);
 
-        // Aktuelles Board erstellen
+        // Hole das aktuelle Board
         Board board = gameController.getBoard();
-        Map<String, PieceInfo> boardMap = new HashMap<>();
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
-                Position pos = new Position(x, y);
-                ChessPiece piece = board.getPiece(y, x);
-                if (piece != null) {
-                    boardMap.put(pos.toString(), new PieceInfo(piece.getType(), piece.getColour()));
-                }
-            }
-        }
+        Map<String, PieceInfo> boardMap = getCurrentBoard();
 
         // Überprüfe auf Schach
         Position checkedKingPosition = null;
@@ -71,6 +66,31 @@ public class GameMessageController {
         // Sende Move-Info mit Schach-Position
         MoveResponse moveResponse = new MoveResponse(move, checkedKingPosition);
         messagingTemplate.convertAndSend("/topic/game/move", moveResponse);
+    }
+
+    public void startGame() {
+        // Sende das initiale Board
+        messagingTemplate.convertAndSend("/topic/game/board", getCurrentBoard());
+
+        // Sende das aktive Team (zu Beginn immer Weiß)
+        messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
+    }
+
+    public Map<String, PieceInfo> getCurrentBoard() {
+        Board board = gameController.getBoard();
+        Map<String, PieceInfo> boardMap = new HashMap<>();
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                Position pos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y, x);
+                if (piece != null) {
+                    boardMap.put(pos.toString(), new PieceInfo(piece.getType(), piece.getColour()));
+                }else  {
+                    boardMap.put(pos.toString(), new PieceInfo(null, null));
+                }
+            }
+        }
+        return boardMap;
     }
 
     @Getter

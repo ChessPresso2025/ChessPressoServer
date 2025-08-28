@@ -16,7 +16,14 @@ public class UserService {
         this.userRepository = userRepository;
     }
 
+    /**
+     * Ruft den Benutzernamen für eine gegebene Benutzer-ID ab
+     */
     public String getUsernameById(String userId) {
+        if (userId == null) {
+            return null;
+        }
+
         try {
             UUID userUuid = UUID.fromString(userId);
             Optional<User> user = userRepository.findById(userUuid);
@@ -43,7 +50,14 @@ public class UserService {
     }
 
 
+    /**
+     * Überprüft, ob ein Benutzer mit der gegebenen ID existiert
+     */
     public boolean userExists(String userId) {
+        if (userId == null) {
+            return false;
+        }
+
         try {
             UUID userUuid = UUID.fromString(userId);
             return userRepository.existsById(userUuid);

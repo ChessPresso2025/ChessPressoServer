@@ -46,10 +46,16 @@ public class LobbyWebSocketManager {
         lobbyConnections.computeIfAbsent(lobbyId, k -> ConcurrentHashMap.newKeySet()).add(playerId);
         activeLobbies.add(lobbyId);
 
+        String username = userService.getUsernameById(playerId);
+        // Fallback falls username null ist
+        if (username == null) {
+            username = "Unknown User";
+        }
+
         // Informiere alle Spieler in der Lobby über die neue Verbindung
         broadcastToLobby(lobbyId, "PLAYER_CONNECTED", Map.of(
             "playerId", playerId,
-            "username", userService.getUsernameById(playerId),
+            "username", username,
             "connectedPlayers", lobbyConnections.get(lobbyId).size()
         ));
     }
@@ -85,7 +91,7 @@ public class LobbyWebSocketManager {
         messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, Map.of(
             "type", messageType,
             "lobbyId", lobbyId,
-            "payload", payload,
+            "payload", payload != null ? payload : Map.of(),
             "timestamp", System.currentTimeMillis()
         ));
     }

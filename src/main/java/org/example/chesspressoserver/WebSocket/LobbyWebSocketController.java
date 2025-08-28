@@ -50,24 +50,12 @@ public class LobbyWebSocketController {
      */
     @MessageMapping("/lobby/join")
     public void handleLobbyJoin(@Payload LobbyJoinMessage message, SimpMessageHeaderAccessor headerAccessor) {
-        String token = (String) headerAccessor.getSessionAttributes().get("token");
-
-        if (token == null) {
-            messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                Map.of("error", "Authentifizierung erforderlich"));
-            return;
-        }
+        String username = extractUsernameOrSendError(message.getPlayerId(), headerAccessor, "Lobby-Beitritt");
+        if (username == null) return;
+        var lobby = validateLobbyAndMembership(message.getLobbyId(), message.getPlayerId(), false);
+        if (lobby == null) return;
 
         try {
-            String username = jwtService.getUsernameFromToken(token);
-            var lobby = lobbyService.getLobby(message.getLobbyId());
-
-            if (lobby == null) {
-                messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                    Map.of("error", "Lobby nicht gefunden", "lobbyId", message.getLobbyId()));
-                return;
-            }
-
             // Registriere WebSocket-Verbindung für diese spezifische Lobby
             lobbyManager.registerLobbyConnection(message.getLobbyId(), message.getPlayerId());
 
@@ -79,12 +67,10 @@ public class LobbyWebSocketController {
                 "playerId", message.getPlayerId(),
                 "username", username,
                 "message", username + " ist der Lobby beigetreten",
-                "totalPlayers", lobby.getPlayers().size()
+                "totalPlayers", ((org.example.chesspressoserver.models.Lobby)lobby).getPlayers().size()
             ));
-
         } catch (Exception e) {
-            messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                Map.of("error", "Fehler beim Lobby-Beitritt: " + e.getMessage()));
+            sendErrorToUser(message.getPlayerId(), "Fehler beim Lobby-Beitritt: " + e.getMessage());
         }
     }
 
@@ -93,25 +79,17 @@ public class LobbyWebSocketController {
      */
     @MessageMapping("/lobby/leave")
     public void handleLobbyLeave(@Payload LobbyLeaveMessage message, SimpMessageHeaderAccessor headerAccessor) {
-        String token = (String) headerAccessor.getSessionAttributes().get("token");
-
-        if (token != null) {
-            try {
-                String username = jwtService.getUsernameFromToken(token);
-
-                // Entferne WebSocket-Verbindung nur aus dieser spezifischen Lobby
-                lobbyManager.unregisterLobbyConnection(message.getLobbyId(), message.getPlayerId());
-
-                // Benachrichtige nur die verbleibenden Spieler in DIESER Lobby
-                lobbyManager.broadcastToLobby(message.getLobbyId(), "PLAYER_LEFT", Map.of(
-                    "playerId", message.getPlayerId(),
-                    "username", username,
-                    "message", username + " hat die Lobby verlassen"
-                ));
-
-            } catch (Exception e) {
-                // Stille Behandlung beim Verlassen
-            }
+        String username = extractUsernameOrSendError(message.getPlayerId(), headerAccessor, "Lobby-Verlassen");
+        if (username == null) return;
+        try {
+            lobbyManager.unregisterLobbyConnection(message.getLobbyId(), message.getPlayerId());
+            lobbyManager.broadcastToLobby(message.getLobbyId(), "PLAYER_LEFT", Map.of(
+                "playerId", message.getPlayerId(),
+                "username", username,
+                "message", username + " hat die Lobby verlassen"
+            ));
+        } catch (Exception e) {
+            // Stille Behandlung beim Verlassen
         }
     }
 
@@ -120,43 +98,19 @@ public class LobbyWebSocketController {
      */
     @MessageMapping("/lobby/chat")
     public void handleLobbyChat(@Payload ChatMessage message, SimpMessageHeaderAccessor headerAccessor) {
-        String token = (String) headerAccessor.getSessionAttributes().get("token");
-
-        if (token == null) {
-            messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                Map.of("error", "Authentifizierung erforderlich"));
-            return;
-        }
-
+        String username = extractUsernameOrSendError(message.getPlayerId(), headerAccessor, "Chat");
+        if (username == null) return;
+        var lobby = validateLobbyAndMembership(message.getLobbyId(), message.getPlayerId(), true);
+        if (lobby == null) return;
         try {
-            String username = jwtService.getUsernameFromToken(token);
-
-            // Validiere Lobby-Existenz
-            var lobby = lobbyService.getLobby(message.getLobbyId());
-            if (lobby == null) {
-                messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                    Map.of("error", "Lobby nicht gefunden", "lobbyId", message.getLobbyId()));
-                return;
-            }
-
-            // Prüfe ob Spieler in der Lobby ist
-            if (!lobby.getPlayers().contains(message.getPlayerId())) {
-                messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                    Map.of("error", "Du bist nicht in dieser Lobby", "lobbyId", message.getLobbyId()));
-                return;
-            }
-
-            // Chat-Nachricht wird NUR an diese spezifische Lobby gesendet
             lobbyManager.broadcastToLobby(message.getLobbyId(), "CHAT_MESSAGE", Map.of(
                 "playerId", message.getPlayerId(),
                 "username", username,
                 "message", message.getMessage(),
                 "timestamp", message.getTimestamp() != null ? message.getTimestamp() : System.currentTimeMillis()
             ));
-
         } catch (Exception e) {
-            messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                Map.of("error", "Fehler beim Chat: " + e.getMessage()));
+            sendErrorToUser(message.getPlayerId(), "Fehler beim Chat: " + e.getMessage());
         }
     }
 
@@ -165,68 +119,35 @@ public class LobbyWebSocketController {
      */
     @MessageMapping("/lobby/ready")
     public void handlePlayerReady(@Payload ReadyMessage message, SimpMessageHeaderAccessor headerAccessor) {
-        String token = (String) headerAccessor.getSessionAttributes().get("token");
-
-        if (token == null) {
-            messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                Map.of("error", "Authentifizierung erforderlich"));
-            return;
-        }
-
+        String username = extractUsernameOrSendError(message.getPlayerId(), headerAccessor, "Ready-Status");
+        if (username == null) return;
+        var lobby = validateLobbyAndMembership(message.getLobbyId(), message.getPlayerId(), true);
+        if (lobby == null) return;
         try {
-            String username = jwtService.getUsernameFromToken(token);
-
-            // Validiere Lobby-Existenz
-            var lobby = lobbyService.getLobby(message.getLobbyId());
-            if (lobby == null) {
-                messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                    Map.of("error", "Lobby nicht gefunden", "lobbyId", message.getLobbyId()));
-                return;
-            }
-
-            // Prüfe ob Spieler in der Lobby ist
-            if (!lobby.getPlayers().contains(message.getPlayerId())) {
-                messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                    Map.of("error", "Du bist nicht in dieser Lobby", "lobbyId", message.getLobbyId()));
-                return;
-            }
-
-            // Update Ready-Status im LobbyService
             boolean success = lobbyService.updatePlayerReadyStatus(message.getLobbyId(), message.getPlayerId(), message.isReady());
-
             if (success) {
-                // Ready-Update wird NUR an diese spezifische Lobby gesendet
                 lobbyManager.broadcastToLobby(message.getLobbyId(), "PLAYER_READY_UPDATE", Map.of(
                     "playerId", message.getPlayerId(),
                     "username", username,
                     "ready", message.isReady(),
                     "message", username + (message.isReady() ? " ist bereit" : " ist nicht mehr bereit")
                 ));
-
-                // Aktualisiere Lobby-Status nur für diese Lobby
                 lobbyManager.sendLobbyStatusUpdate(message.getLobbyId());
-
-                // Prüfe ob alle Spieler bereit sind und starte ggf. das Spiel
-                if (lobbyService.areAllPlayersReady(message.getLobbyId()) && lobby.getPlayers().size() >= 2) {
-                    // Spielstart-Nachricht nur an diese Lobby
+                if (lobbyService.areAllPlayersReady(message.getLobbyId()) && ((org.example.chesspressoserver.models.Lobby)lobby).getPlayers().size() >= 2) {
                     lobbyManager.broadcastToLobby(message.getLobbyId(), "GAME_STARTING", Map.of(
                         "message", "Alle Spieler sind bereit! Spiel startet...",
-                        "players", lobby.getPlayers().stream()
+                        "players", ((org.example.chesspressoserver.models.Lobby)lobby).getPlayers().stream()
                             .map(playerId -> Map.of("playerId", playerId, "username", userService.getUsernameById(playerId)))
                             .toList(),
-                        "gameTime", lobby.getGameTime()
+                        "gameTime", ((org.example.chesspressoserver.models.Lobby)lobby).getGameTime()
                     ));
-
                     lobbyService.startGameIfReady(message.getLobbyId());
                 }
             } else {
-                messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                    Map.of("error", "Konnte Ready-Status nicht aktualisieren", "lobbyId", message.getLobbyId()));
+                sendErrorToUser(message.getPlayerId(), "Konnte Ready-Status nicht aktualisieren");
             }
-
         } catch (Exception e) {
-            messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
-                Map.of("error", "Fehler beim Ready-Status: " + e.getMessage()));
+            sendErrorToUser(message.getPlayerId(), "Fehler beim Ready-Status: " + e.getMessage());
         }
     }
 
@@ -235,26 +156,69 @@ public class LobbyWebSocketController {
      */
     @MessageMapping("/lobby/test-isolation")
     public void testLobbyIsolation(@Payload Map<String, String> request, SimpMessageHeaderAccessor headerAccessor) {
-        String token = (String) headerAccessor.getSessionAttributes().get("token");
-
-        if (token != null) {
+        String playerId = request.getOrDefault("playerId", "");
+        String username = extractUsernameOrSendError(playerId, headerAccessor, "Isolation-Test");
+        if (username == null) return;
+        String lobbyId = request.get("lobbyId");
+        if (lobbyId != null) {
             try {
-                String username = jwtService.getUsernameFromToken(token);
-                String lobbyId = request.get("lobbyId");
-
-                if (lobbyId != null) {
-                    // Sende Test-Nachricht nur an die angegebene Lobby
-                    lobbyManager.broadcastToLobby(lobbyId, "ISOLATION_TEST", Map.of(
-                        "message", "Isolation-Test von " + username,
-                        "lobbyId", lobbyId,
-                        "activeLobbies", lobbyManager.getActiveLobbies().size(),
-                        "connectionsInThisLobby", lobbyManager.getActiveConnectionsCount(lobbyId)
-                    ));
-                }
+                lobbyManager.broadcastToLobby(lobbyId, "ISOLATION_TEST", Map.of(
+                    "message", "Isolation-Test von " + username,
+                    "lobbyId", lobbyId,
+                    "activeLobbies", lobbyManager.getActiveLobbies().size(),
+                    "connectionsInThisLobby", lobbyManager.getActiveConnectionsCount(lobbyId)
+                ));
             } catch (Exception e) {
                 // Stille Behandlung
             }
         }
+    }
+
+    // --- Utility methods to reduce code duplication ---
+    /**
+     * Extrahiert das Token aus den Session-Attributen und gibt den Username zurück.
+     * Sendet bei Fehler eine Nachricht an den User und gibt null zurück.
+     */
+    private String extractUsernameOrSendError(String playerId, SimpMessageHeaderAccessor headerAccessor, String errorPrefix) {
+        String token = (String) headerAccessor.getSessionAttributes().get("token");
+        if (token == null) {
+            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+                Map.of("error", errorPrefix + ": Authentifizierung erforderlich"));
+            return null;
+        }
+        try {
+            return jwtService.getUsernameFromToken(token);
+        } catch (Exception e) {
+            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+                Map.of("error", errorPrefix + ": Fehler bei Authentifizierung: " + e.getMessage()));
+            return null;
+        }
+    }
+
+    /**
+     * Validiert, ob die Lobby existiert und der Spieler Mitglied ist. Sendet ggf. Fehler.
+     * Gibt das Lobby-Objekt zurück oder null bei Fehler.
+     */
+    private Object validateLobbyAndMembership(String lobbyId, String playerId, boolean checkMembership) {
+        var lobby = lobbyService.getLobby(lobbyId);
+        if (lobby == null) {
+            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+                Map.of("error", "Lobby nicht gefunden", "lobbyId", lobbyId));
+            return null;
+        }
+        if (checkMembership && !lobby.getPlayers().contains(playerId)) {
+            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+                Map.of("error", "Du bist nicht in dieser Lobby", "lobbyId", lobbyId));
+            return null;
+        }
+        return lobby;
+    }
+
+    /**
+     * Sendet eine Fehlernachricht an den User
+     */
+    private void sendErrorToUser(String playerId, String message) {
+        messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error", Map.of("error", message));
     }
 
     // Message DTOs

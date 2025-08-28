@@ -45,13 +45,11 @@ public class LobbyWebSocketManager {
     public void registerLobbyConnection(String lobbyId, String playerId) {
         lobbyConnections.computeIfAbsent(lobbyId, k -> ConcurrentHashMap.newKeySet()).add(playerId);
         activeLobbies.add(lobbyId);
-
         String username = userService.getUsernameById(playerId);
         // Fallback falls username null ist
         if (username == null) {
             username = "Unknown User";
         }
-
         // Informiere alle Spieler in der Lobby über die neue Verbindung
         broadcastToLobby(lobbyId, "PLAYER_CONNECTED", Map.of(
             "playerId", playerId,

@@ -18,6 +18,8 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.security.Principal;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
@@ -29,16 +31,22 @@ public class LobbyWebSocketController {
     private final SimpMessagingTemplate messagingTemplate;
     private final JwtService jwtService;
     private final UserService userService;
+    private final LobbyWebSocketManager lobbyManager;
 
-    public LobbyWebSocketController(LobbyService lobbyService, SimpMessagingTemplate messagingTemplate, JwtService jwtService, UserService userService) {
+    public LobbyWebSocketController(LobbyService lobbyService,
+                                  SimpMessagingTemplate messagingTemplate,
+                                  JwtService jwtService,
+                                  UserService userService,
+                                  LobbyWebSocketManager lobbyManager) {
         this.lobbyService = lobbyService;
         this.messagingTemplate = messagingTemplate;
         this.jwtService = jwtService;
         this.userService = userService;
+        this.lobbyManager = lobbyManager;
     }
 
     /**
-     * Handler für Lobby-Beitritt - sendet Spielerinformationen mit dekodierten Benutzernamen
+     * Handler für Lobby-Beitritt - registriert Verbindung und sendet isolierte Updates
      */
     @MessageMapping("/lobby/join")
     public void handleLobbyJoin(@Payload LobbyJoinMessage message, SimpMessageHeaderAccessor headerAccessor) {
@@ -60,22 +68,19 @@ public class LobbyWebSocketController {
                 return;
             }
 
-            // Erstelle Spielerinformationen mit dekodierten Benutzernamen
-            List<PlayerInfo> playersInfo = new ArrayList<>();
-            for (String playerId : lobby.getPlayers()) {
-                String playerUsername = getUsernameForPlayer(playerId);
-                playersInfo.add(new PlayerInfo(playerId, playerUsername));
-            }
+            // Registriere WebSocket-Verbindung für diese spezifische Lobby
+            lobbyManager.registerLobbyConnection(message.getLobbyId(), message.getPlayerId());
 
-            // Sende Lobby-Update mit Spielerinformationen an alle Teilnehmer
-            LobbyUpdateMessage updateMessage = new LobbyUpdateMessage(
-                message.getLobbyId(),
-                playersInfo,
-                lobby.getStatus().toString(),
-                "Spieler " + username + " ist der Lobby beigetreten"
-            );
+            // Sende Lobby-Status-Update nur an diese Lobby (nicht an andere!)
+            lobbyManager.sendLobbyStatusUpdate(message.getLobbyId());
 
-            messagingTemplate.convertAndSend("/topic/lobby/" + message.getLobbyId(), updateMessage);
+            // Zusätzliche Willkommensnachricht nur für diese Lobby
+            lobbyManager.broadcastToLobby(message.getLobbyId(), "PLAYER_JOINED", Map.of(
+                "playerId", message.getPlayerId(),
+                "username", username,
+                "message", username + " ist der Lobby beigetreten",
+                "totalPlayers", lobby.getPlayers().size()
+            ));
 
         } catch (Exception e) {
             messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
@@ -84,7 +89,34 @@ public class LobbyWebSocketController {
     }
 
     /**
-     * Erweiterte Chat-Message Handler mit dekodiertem Benutzernamen
+     * Handler für Lobby-Verlassen - entfernt Verbindung aus spezifischer Lobby
+     */
+    @MessageMapping("/lobby/leave")
+    public void handleLobbyLeave(@Payload LobbyLeaveMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String token = (String) headerAccessor.getSessionAttributes().get("token");
+
+        if (token != null) {
+            try {
+                String username = jwtService.getUsernameFromToken(token);
+
+                // Entferne WebSocket-Verbindung nur aus dieser spezifischen Lobby
+                lobbyManager.unregisterLobbyConnection(message.getLobbyId(), message.getPlayerId());
+
+                // Benachrichtige nur die verbleibenden Spieler in DIESER Lobby
+                lobbyManager.broadcastToLobby(message.getLobbyId(), "PLAYER_LEFT", Map.of(
+                    "playerId", message.getPlayerId(),
+                    "username", username,
+                    "message", username + " hat die Lobby verlassen"
+                ));
+
+            } catch (Exception e) {
+                // Stille Behandlung beim Verlassen
+            }
+        }
+    }
+
+    /**
+     * Erweiterte Chat-Message Handler mit Lobby-Isolation
      */
     @MessageMapping("/lobby/chat")
     public void handleLobbyChat(@Payload ChatMessage message, SimpMessageHeaderAccessor headerAccessor) {
@@ -98,11 +130,6 @@ public class LobbyWebSocketController {
 
         try {
             String username = jwtService.getUsernameFromToken(token);
-
-            // Setze Timestamp falls nicht vorhanden
-            if (message.getTimestamp() == null) {
-                message.setTimestamp(System.currentTimeMillis());
-            }
 
             // Validiere Lobby-Existenz
             var lobby = lobbyService.getLobby(message.getLobbyId());
@@ -119,17 +146,13 @@ public class LobbyWebSocketController {
                 return;
             }
 
-            // Erweitere Chat-Nachricht um dekodierte Benutzername
-            EnhancedChatMessage enhancedMessage = new EnhancedChatMessage(
-                message.getLobbyId(),
-                message.getPlayerId(),
-                username,
-                message.getMessage(),
-                message.getTimestamp()
-            );
-
-            // Broadcast Chat-Nachricht an alle Lobby-Teilnehmer
-            messagingTemplate.convertAndSend("/topic/lobby/" + message.getLobbyId(), enhancedMessage);
+            // Chat-Nachricht wird NUR an diese spezifische Lobby gesendet
+            lobbyManager.broadcastToLobby(message.getLobbyId(), "CHAT_MESSAGE", Map.of(
+                "playerId", message.getPlayerId(),
+                "username", username,
+                "message", message.getMessage(),
+                "timestamp", message.getTimestamp() != null ? message.getTimestamp() : System.currentTimeMillis()
+            ));
 
         } catch (Exception e) {
             messagingTemplate.convertAndSendToUser(message.getPlayerId(), "/queue/lobby-error",
@@ -138,7 +161,7 @@ public class LobbyWebSocketController {
     }
 
     /**
-     * Erweiterte Player-Ready Handler mit dekodiertem Benutzernamen
+     * Erweiterte Player-Ready Handler mit Lobby-Isolation
      */
     @MessageMapping("/lobby/ready")
     public void handlePlayerReady(@Payload ReadyMessage message, SimpMessageHeaderAccessor headerAccessor) {
@@ -172,21 +195,28 @@ public class LobbyWebSocketController {
             boolean success = lobbyService.updatePlayerReadyStatus(message.getLobbyId(), message.getPlayerId(), message.isReady());
 
             if (success) {
-                // Erweiterte Ready-Nachricht mit dekodiertem Benutzernamen
-                EnhancedReadyMessage enhancedMessage = new EnhancedReadyMessage(
-                    message.getLobbyId(),
-                    message.getPlayerId(),
-                    username,
-                    message.isReady()
-                );
+                // Ready-Update wird NUR an diese spezifische Lobby gesendet
+                lobbyManager.broadcastToLobby(message.getLobbyId(), "PLAYER_READY_UPDATE", Map.of(
+                    "playerId", message.getPlayerId(),
+                    "username", username,
+                    "ready", message.isReady(),
+                    "message", username + (message.isReady() ? " ist bereit" : " ist nicht mehr bereit")
+                ));
 
-                // Broadcast Ready-Update an alle Lobby-Teilnehmer
-                messagingTemplate.convertAndSend("/topic/lobby/" + message.getLobbyId(), enhancedMessage);
+                // Aktualisiere Lobby-Status nur für diese Lobby
+                lobbyManager.sendLobbyStatusUpdate(message.getLobbyId());
 
                 // Prüfe ob alle Spieler bereit sind und starte ggf. das Spiel
                 if (lobbyService.areAllPlayersReady(message.getLobbyId()) && lobby.getPlayers().size() >= 2) {
-                    // Sende Spielstart-Nachricht mit Spielerinformationen
-                    sendGameStartMessage(message.getLobbyId(), lobby);
+                    // Spielstart-Nachricht nur an diese Lobby
+                    lobbyManager.broadcastToLobby(message.getLobbyId(), "GAME_STARTING", Map.of(
+                        "message", "Alle Spieler sind bereit! Spiel startet...",
+                        "players", lobby.getPlayers().stream()
+                            .map(playerId -> Map.of("playerId", playerId, "username", userService.getUsernameById(playerId)))
+                            .toList(),
+                        "gameTime", lobby.getGameTime()
+                    ));
+
                     lobbyService.startGameIfReady(message.getLobbyId());
                 }
             } else {
@@ -201,37 +231,29 @@ public class LobbyWebSocketController {
     }
 
     /**
-     * Sendet Spielstart-Nachricht mit Spielerinformationen
+     * Debug-Endpoint um Lobby-Isolation zu testen
      */
-    private void sendGameStartMessage(String lobbyId, org.example.chesspressoserver.models.Lobby lobby) {
-        List<PlayerInfo> playersInfo = new ArrayList<>();
-        for (String playerId : lobby.getPlayers()) {
-            String username = getUsernameForPlayer(playerId);
-            playersInfo.add(new PlayerInfo(playerId, username));
-        }
+    @MessageMapping("/lobby/test-isolation")
+    public void testLobbyIsolation(@Payload Map<String, String> request, SimpMessageHeaderAccessor headerAccessor) {
+        String token = (String) headerAccessor.getSessionAttributes().get("token");
 
-        GameStartMessage gameStartMessage = new GameStartMessage(
-            lobbyId,
-            playersInfo,
-            lobby.getWhitePlayer(),
-            lobby.getBlackPlayer(),
-            lobby.getGameTime()
-        );
+        if (token != null) {
+            try {
+                String username = jwtService.getUsernameFromToken(token);
+                String lobbyId = request.get("lobbyId");
 
-        messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, gameStartMessage);
-    }
-
-    /**
-     * Hilfsmethode zum Abrufen des Benutzernamens für einen Spieler
-     */
-    private String getUsernameForPlayer(String playerId) {
-        // Hier würden Sie normalerweise den Benutzernamen aus einer Datenbank oder Cache abrufen
-        // Für jetzt geben wir den playerId zurück, falls der Username nicht verfügbar ist
-        try {
-            // Implementierung würde hier den tatsächlichen Username aus der Datenbank abrufen
-            return userService.getUsernameById(playerId);
-        } catch (Exception e) {
-            return playerId; // Fallback bei Fehlern
+                if (lobbyId != null) {
+                    // Sende Test-Nachricht nur an die angegebene Lobby
+                    lobbyManager.broadcastToLobby(lobbyId, "ISOLATION_TEST", Map.of(
+                        "message", "Isolation-Test von " + username,
+                        "lobbyId", lobbyId,
+                        "activeLobbies", lobbyManager.getActiveLobbies().size(),
+                        "connectionsInThisLobby", lobbyManager.getActiveConnectionsCount(lobbyId)
+                    ));
+                }
+            } catch (Exception e) {
+                // Stille Behandlung
+            }
         }
     }
 
@@ -344,5 +366,14 @@ public class LobbyWebSocketController {
         private String whitePlayer;
         private String blackPlayer;
         private GameTime gameTime;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class LobbyLeaveMessage {
+        private String lobbyId;
+        private String playerId;
     }
 }

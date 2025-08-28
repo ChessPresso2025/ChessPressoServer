@@ -23,6 +23,9 @@ class WebSocketEventListenerTest {
     @Mock
     private LobbyService lobbyService;
 
+    @Mock
+    private LobbyWebSocketManager lobbyWebSocketManager;
+
     @InjectMocks
     private WebSocketEventListener webSocketEventListener;
 
@@ -60,7 +63,8 @@ class WebSocketEventListenerTest {
         WebSocketEventListener listener = new WebSocketEventListener(
             onlinePlayerService,
             connectionStatusBroadcaster,
-            lobbyService
+            lobbyService,
+            lobbyWebSocketManager
         );
 
         // Then

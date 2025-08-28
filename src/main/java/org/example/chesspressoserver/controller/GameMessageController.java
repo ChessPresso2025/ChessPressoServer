@@ -68,6 +68,7 @@ public class GameMessageController {
         messagingTemplate.convertAndSend("/topic/game/move", moveResponse);
     }
 
+    @MessageMapping("/game/start")
     public void startGame() {
         // Sende das initiale Board
         messagingTemplate.convertAndSend("/topic/game/board", getCurrentBoard());

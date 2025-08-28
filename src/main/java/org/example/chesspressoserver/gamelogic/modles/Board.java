@@ -64,6 +64,5 @@ public class Board {
                 {B_P, B_P, B_P, B_P, B_P, B_P, B_P, B_P},
                 {B_R, B_N, B_B, B_Q, B_K, B_B, B_N, B_R}
         };
-
     }
 }

@@ -65,4 +65,17 @@ public class UserService {
             return false;
         }
     }
+
+    /**
+     * Ändert den Benutzernamen eines Nutzers, sofern der neue Name noch nicht vergeben ist.
+     */
+    public void changeUsername(UUID userId, String newUsername) {
+        if (userRepository.existsByUsername(newUsername)) {
+            throw new IllegalArgumentException("Benutzername bereits vergeben");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Nutzer nicht gefunden"));
+        user.setUsername(newUsername);
+        userRepository.save(user);
+    }
 }

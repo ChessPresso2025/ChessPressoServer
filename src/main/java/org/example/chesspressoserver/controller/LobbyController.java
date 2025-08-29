@@ -6,10 +6,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.example.chesspressoserver.models.GameTime;
 import org.example.chesspressoserver.service.LobbyService;
+import org.example.chesspressoserver.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -18,9 +21,11 @@ import jakarta.servlet.http.HttpServletRequest;
 public class LobbyController {
 
     private final LobbyService lobbyService;
+    private final UserService userService;
 
-    public LobbyController(LobbyService lobbyService) {
+    public LobbyController(LobbyService lobbyService, UserService userService) {
         this.lobbyService = lobbyService;
+        this.userService = userService;
     }
 
 
@@ -80,7 +85,9 @@ public class LobbyController {
         String playerId = principal != null ? principal.getName() :
                          request.getSession().getId();
 
-        System.out.println("DEBUG: Create lobby request from player: " + playerId);
+        String playerName = userService.getUsernameById(playerId);
+
+        System.out.println("DEBUG: Create lobby request from player: " + playerName);
 
         // Prüfe ob Spieler bereits in einer Lobby ist
         String existingLobby = lobbyService.getPlayerLobby(playerId);
@@ -95,7 +102,7 @@ public class LobbyController {
                 "success", true,
                 "lobbyCode", lobbyCode,
                 "message", "Private Lobby erstellt",
-                "playerId", playerId  // Für Debug
+                "playerId", playerName  // Für Debug
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -112,6 +119,8 @@ public class LobbyController {
         String playerId = principal != null ? principal.getName() :
                          httpRequest.getSession().getId();
 
+        String playerName = userService.getUsernameById(playerId);
+
         System.out.println("DEBUG: Join lobby request from player: " + playerId);
         System.out.println("DEBUG: Trying to join lobby: " + request.getLobbyCode());
 
@@ -126,13 +135,13 @@ public class LobbyController {
 
         if (success) {
             // WebSocket-Broadcast nach erfolgreichem Join
-            lobbyService.broadcastLobbyJoined(request.getLobbyCode(), playerId);
+            lobbyService.broadcastLobbyJoined(request.getLobbyCode(), playerName);
             
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "lobbyCode", request.getLobbyCode(),
                 "message", "Erfolgreich der Lobby beigetreten",
-                "playerId", playerId  // Für Debug
+                "playerId", playerName  // Für Debug
             ));
         } else {
             return ResponseEntity.badRequest().body(Map.of(
@@ -166,14 +175,19 @@ public class LobbyController {
             return ResponseEntity.notFound().build();
         }
 
+        List<String> playerNames = new ArrayList<String>();
+        for(int i = 0; i<lobby.getPlayers().size(); i++){
+            playerNames.add(userService.getUsernameById(lobby.getPlayers().get(i)));
+        }
+
         return ResponseEntity.ok(Map.of(
             "lobbyId", lobby.getLobbyId(),
             "lobbyType", lobby.getLobbyType().toString(),
-            "players", lobby.getPlayers(),
+            "players", playerNames,
             "status", lobby.getStatus().toString(),
             "gameTime", lobby.getGameTime() != null ? lobby.getGameTime().toString() : "null",
             "isGameStarted", lobby.isGameStarted(),
-            "creator", lobby.getCreator()
+            "creator", userService.getUsernameById(lobby.getCreator())
         ));
     }
 

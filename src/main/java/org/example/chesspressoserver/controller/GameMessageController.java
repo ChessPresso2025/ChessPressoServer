@@ -5,14 +5,12 @@ import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.models.gamemodels.*;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.springframework.web.bind.annotation.PostMapping;
 
 import java.util.HashMap;
 import java.util.List;
@@ -20,59 +18,59 @@ import java.util.Map;
 
 @Controller
 public class GameMessageController {
+    @Getter
     private final GameController gameController;
     private final SimpMessagingTemplate messagingTemplate;
+
 
     public GameMessageController(GameController gameController, SimpMessagingTemplate messagingTemplate) {
         this.gameController = gameController;
         this.messagingTemplate = messagingTemplate;
+
     }
 
-    @MessageMapping("/game/request")
-    @SendTo("/topic/game/possibleMoves")
-    public List<Position> handleRequest(@Payload PositionRequest request) {
+    @MessageMapping("/game/position-request")
+    public void handleRequest(@Payload PositionRequest request) {
         Position position = new Position(request.getPosition());
-        return gameController.getMovesForRequest(position);
+        List<String> moves = gameController.getMovesForRequestAsString(position);
+        messagingTemplate.convertAndSend(
+                "/topic/game/" + request.lobbyId + "/possible-moves",
+                Map.of("type", "possible-moves", "possibleMoves", moves)
+        );
     }
 
     @MessageMapping("/game/move")
     public void handleMove(@Payload MoveRequest moveRequest) {
+            Position start = new Position(moveRequest.getFrom());
+            Position end = new Position(moveRequest.getTo());
 
-        Position start = new Position(moveRequest.getFrom());
-        Position end = new Position(moveRequest.getTo());
-        PieceType promotionType = moveRequest.getPromotionType() != null ?
-            PieceType.valueOf(moveRequest.getPromotionType()) : null;
+            PieceType promotionType = null;
+            if (moveRequest.getPromotionType() != null && !moveRequest.getPromotionType().isEmpty()) {
+                promotionType = PieceType.valueOf(moveRequest.getPromotionType());
+            }
 
-        Move move = gameController.applyMove(start, end, promotionType);
+            Move move = gameController.applyMove(start, end, promotionType);
+            Board board = gameController.getBoard();
+            Map<String, PieceInfo> boardMap = getCurrentBoard();
 
-        // Hole das aktuelle Board
-        Board board = gameController.getBoard();
-        Map<String, PieceInfo> boardMap = getCurrentBoard();
+            Position checkedKingPosition = null;
+            TeamColor opposingTeam = gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
+            Position kingPos = board.getKingPosition(opposingTeam);
 
-        // Überprüfe auf Schach
-        Position checkedKingPosition = null;
-        Position kingPos = board.getKingPosition(gameController.getAktiveTeam());
-        if (kingPos != null && gameController.isSquareAttackedBy(
-                gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE,
-                kingPos)) {
-            checkedKingPosition = kingPos;
-        }
+            if (kingPos != null && gameController.isSquareAttackedBy(gameController.getAktiveTeam(), kingPos)) {
+                checkedKingPosition = kingPos;
+            }
 
-        // Sende Board-Update
-        messagingTemplate.convertAndSend("/topic/game/board", boardMap);
-        // Sende zuerst das aktive Team
-        messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
-        // Sende Move-Info mit Schach-Position
-        MoveResponse moveResponse = new MoveResponse(move, checkedKingPosition);
-        messagingTemplate.convertAndSend("/topic/game/move", moveResponse);
-    }
-
-    @MessageMapping("/game/start")
-    public void startGame() {
-        // Sende das initiale Board
-        messagingTemplate.convertAndSend("/topic/game/board", getCurrentBoard());
-        // Sende das aktive Team (zu Beginn immer Weiß)
-        messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
+            messagingTemplate.convertAndSend(
+                "/topic/game/" + moveRequest.lobbyId + "/move",
+                Map.of(
+                    "type", "move",
+                    "move", new MoveResponse(moveRequest.lobbyId, move),
+                    "board", boardMap,
+                    "activeTeam", gameController.getAktiveTeam(),
+                    "check", checkedKingPosition != null ? checkedKingPosition.getPos() : null
+                )
+            );
     }
 
     public Map<String, PieceInfo> getCurrentBoard() {
@@ -97,6 +95,7 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class PositionRequest {
+        private String lobbyId;
         private String position;
     }
 
@@ -105,6 +104,7 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class MoveRequest {
+        private String lobbyId;
         private String from;
         private String to;
         private String promotionType;
@@ -115,8 +115,8 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class MoveResponse {
+        private String lobbyId;
         private Move move;
-        private Position checkedKingPosition; // null wenn kein Schach
     }
 
     @Getter

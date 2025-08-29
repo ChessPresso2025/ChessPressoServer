@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -308,5 +309,40 @@ class UserServiceTest {
         } catch (RuntimeException e) {
             assertThat(e.getMessage()).isEqualTo("Database error");
         }
+    }
+
+    @Test
+    void changeUsername_success() {
+        String newUsername = "newUser";
+        when(userRepository.existsByUsername(newUsername)).thenReturn(false);
+        when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
+
+        userService.changeUsername(testUserId, newUsername);
+
+        assertThat(testUser.getUsername()).isEqualTo(newUsername);
+        verify(userRepository).save(testUser);
+    }
+
+    @Test
+    void changeUsername_usernameAlreadyExists_shouldThrow() {
+        String newUsername = "existingUser";
+        when(userRepository.existsByUsername(newUsername)).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.changeUsername(testUserId, newUsername))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Benutzername bereits vergeben");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void changeUsername_userNotFound_shouldThrow() {
+        String newUsername = "newUser";
+        when(userRepository.existsByUsername(newUsername)).thenReturn(false);
+        when(userRepository.findById(testUserId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.changeUsername(testUserId, newUsername))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Nutzer nicht gefunden");
+        verify(userRepository, never()).save(any());
     }
 }

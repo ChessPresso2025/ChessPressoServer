@@ -50,4 +50,19 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         }
     }
+
+    @GetMapping("/profile")
+    public ResponseEntity<Object> getProfile() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String userId = authentication.getName();
+        var profileOpt = userService.getUserProfile(userId);
+        if (profileOpt.isPresent()) {
+            return ResponseEntity.ok(profileOpt.get());
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Nutzer nicht gefunden");
+        }
+    }
 }

@@ -94,4 +94,12 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
+
+    /**
+     * Gibt das User-Profil (Benutzername & E-Mail) für eine gegebene User-ID zurück
+     */
+    public Optional<org.example.chesspressoserver.dto.UserProfileResponse> getUserProfile(String userId) {
+        return getUserById(userId)
+                .map(user -> new org.example.chesspressoserver.dto.UserProfileResponse(user.getUsername(), user.getEmail()));
+    }
 }

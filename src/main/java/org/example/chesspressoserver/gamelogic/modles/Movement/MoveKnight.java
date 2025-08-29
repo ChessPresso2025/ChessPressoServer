@@ -14,32 +14,33 @@ public class MoveKnight extends PieceMove {
 
         int x = start.getX();
         int y = start.getY();
+        ChessPiece startPiece = board.getPiece(y, x);
 
-        // Alle 8 Richtungen abchecken
+        // Alle 8 möglichen Springerzüge
         int[][] directions = {
-                { 2 , 1 },  // 2x rechts hoch
-                { 2 , -1 }, // 2x rechts runter
-                { 1 , 2 },  // 2x hoch rechts
-                { -1, 2 },  // 2x hoch links
-                { -2, 1 },  // 2x links hoch
-                { -2, -1 }, // 2x links runter
-                { 1 , -2 }, // 2x runter rechts
-                { -1, -2 }  // 2x runter links
+                { 2, 1 },   // 2x rechts, 1x hoch
+                { 2, -1 },  // 2x rechts, 1x runter
+                { 1, 2 },   // 1x rechts, 2x hoch
+                { -1, 2 },  // 1x links, 2x hoch
+                { -2, 1 },  // 2x links, 1x hoch
+                { -2, -1 }, // 2x links, 1x runter
+                { 1, -2 },  // 1x rechts, 2x runter
+                { -1, -2 }  // 1x links, 2x runter
         };
 
         for (int[] dir : directions) {
             int newX = x + dir[0];
             int newY = y + dir[1];
 
-            // Brettgrenzen checken (0–7)
+            // Prüfe, ob der Zug innerhalb des Bretts liegt
             if (newX >= 0 && newX < 8 && newY >= 0 && newY < 8) {
-                if (board.checkEmpty(newX, newY)) {
+                // Prüfe, ob das Zielfeld leer ist
+                if (board.checkEmpty(newY, newX)) {
                     possibleMoves.add(new Position(newX, newY));
                 } else {
-                    // Gegnerische Figur darf geschlagen werden
-                    ChessPiece startPiece = board.getPiece(x, y);
-                    ChessPiece piece = board.getPiece(newX, newY);
-                    if (startPiece.getColour() != piece.getColour()) {
+                    // Prüfe, ob auf dem Zielfeld eine gegnerische Figur steht
+                    ChessPiece targetPiece = board.getPiece(newY, newX);
+                    if (targetPiece.getColour() != startPiece.getColour()) {
                         possibleMoves.add(new Position(newX, newY));
                     }
                 }

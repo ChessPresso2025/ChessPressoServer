@@ -167,4 +167,31 @@ class GameControllerTest {
         assertFalse(controller.getCastlingRights().isWhiteKingSide());
         assertFalse(controller.getCastlingRights().isWhiteQueenSide());
     }
+
+    @Test
+    void testInitialKnightMoves() {
+        // Test für das weiße Pferd auf b1
+        Position whiteKnightPosition = new Position(1, 0); // b1 Position
+        when(boardMock.getPiece(whiteKnightPosition.getY(), whiteKnightPosition.getX()))
+                .thenReturn(new ChessPiece(PieceType.KNIGHT, TeamColor.WHITE));
+
+        List<Position> whiteMoves = controller.getMovesForRequest(whiteKnightPosition);
+
+        // Ein Pferd kann von b1 aus nach a3 und c3 ziehen
+        assertTrue(whiteMoves.contains(new Position(0, 2))); // a3
+        assertTrue(whiteMoves.contains(new Position(2, 2))); // c3
+        assertEquals(2, whiteMoves.size()); // Nur diese zwei Züge sind möglich
+
+        // Test für das weiße Pferd auf g1
+        Position whiteKnightPosition2 = new Position(6, 0); // g1 Position
+        when(boardMock.getPiece(whiteKnightPosition2.getY(), whiteKnightPosition2.getX()))
+                .thenReturn(new ChessPiece(PieceType.KNIGHT, TeamColor.WHITE));
+
+        List<Position> whiteMoves2 = controller.getMovesForRequest(whiteKnightPosition2);
+
+        // Ein Pferd kann von g1 aus nach f3 und h3 ziehen
+        assertTrue(whiteMoves2.contains(new Position(5, 2))); // f3
+        assertTrue(whiteMoves2.contains(new Position(7, 2))); // h3
+        assertEquals(2, whiteMoves2.size()); // Nur diese zwei Züge sind möglich
+    }
 }

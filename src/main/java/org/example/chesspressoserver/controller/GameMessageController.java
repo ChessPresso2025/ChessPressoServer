@@ -37,8 +37,6 @@ public class GameMessageController {
 
     @MessageMapping("/game/move")
     public void handleMove(@Payload MoveRequest moveRequest) {
-        // Sende zuerst das aktive Team
-        messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
 
         Position start = new Position(moveRequest.getFrom());
         Position end = new Position(moveRequest.getTo());
@@ -62,7 +60,8 @@ public class GameMessageController {
 
         // Sende Board-Update
         messagingTemplate.convertAndSend("/topic/game/board", boardMap);
-
+        // Sende zuerst das aktive Team
+        messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
         // Sende Move-Info mit Schach-Position
         MoveResponse moveResponse = new MoveResponse(move, checkedKingPosition);
         messagingTemplate.convertAndSend("/topic/game/move", moveResponse);
@@ -72,7 +71,6 @@ public class GameMessageController {
     public void startGame() {
         // Sende das initiale Board
         messagingTemplate.convertAndSend("/topic/game/board", getCurrentBoard());
-
         // Sende das aktive Team (zu Beginn immer Weiß)
         messagingTemplate.convertAndSend("/topic/game/activeTeam", gameController.getAktiveTeam());
     }

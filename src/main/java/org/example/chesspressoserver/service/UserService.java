@@ -2,6 +2,7 @@ package org.example.chesspressoserver.service;
 
 import org.example.chesspressoserver.models.User;
 import org.example.chesspressoserver.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -11,9 +12,11 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -76,6 +79,19 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Nutzer nicht gefunden"));
         user.setUsername(newUsername);
+        userRepository.save(user);
+    }
+
+    /**
+     * Ändert das Passwort eines Nutzers, sofern das alte Passwort korrekt ist.
+     */
+    public void changePassword(UUID userId, String oldPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Nutzer nicht gefunden"));
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new SecurityException("Das aktuelle Passwort ist nicht korrekt");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
 }

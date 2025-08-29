@@ -2,6 +2,7 @@ package org.example.chesspressoserver.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.chesspressoserver.dto.ChangePasswordRequest;
 import org.example.chesspressoserver.dto.ChangeUsernameRequest;
 import org.example.chesspressoserver.service.UserService;
 import org.springframework.http.HttpStatus;
@@ -32,5 +33,21 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         }
     }
-}
 
+    @PatchMapping("/password")
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        try {
+            UUID userId = UUID.fromString(authentication.getName());
+            userService.changePassword(userId, request.getOldPassword(), request.getNewPassword());
+            return ResponseEntity.ok().build();
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        }
+    }
+}

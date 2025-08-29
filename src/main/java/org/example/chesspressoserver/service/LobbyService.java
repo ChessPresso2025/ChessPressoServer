@@ -24,8 +24,9 @@ public class LobbyService {
 
     // Quick Match Warteschlangen nach GameTime
     private final Map<GameTime, Queue<String>> quickMatchQueues = new ConcurrentHashMap<>();
+    private final UserService userService;
 
-    public LobbyService(LobbyCodeGenerator lobbyCodeGenerator, SimpMessagingTemplate messagingTemplate) {
+    public LobbyService(LobbyCodeGenerator lobbyCodeGenerator, SimpMessagingTemplate messagingTemplate, UserService userService) {
         this.lobbyCodeGenerator = lobbyCodeGenerator;
         this.messagingTemplate = messagingTemplate;
 
@@ -36,6 +37,7 @@ public class LobbyService {
         for (GameTime gameTime : Arrays.asList(GameTime.SHORT, GameTime.MIDDLE, GameTime.LONG)) {
             quickMatchQueues.put(gameTime, new LinkedList<>());
         }
+        this.userService = userService;
     }
 
 
@@ -354,6 +356,8 @@ public class LobbyService {
     public void broadcastLobbyJoined(String lobbyId, String newPlayerId) {
         Lobby lobby = activeLobbies.get(lobbyId);
 
+        String playerName = userService.getUsernameById(newPlayerId);
+
         if (lobby != null) {
             Map<String, Object> updateMessage = Map.of(
                 "type", "player-joined",
@@ -361,7 +365,7 @@ public class LobbyService {
                 "newPlayerId", newPlayerId,
                 "players", lobby.getPlayers(),
                 "status", lobby.getStatus().toString(),
-                "message", "Player " + newPlayerId + " joined the lobby"
+                "message", "Player " + playerName + " joined the lobby"
             );
 
             // Broadcast an alle Lobby-Teilnehmer

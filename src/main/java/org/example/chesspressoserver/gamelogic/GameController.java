@@ -39,6 +39,15 @@ public class GameController {
     // 1) REQUEST: alle LEGALEN Züge für die Figur an startPos
     // =====================================================================
 
+    public List<String> getMovesForRequestAsString(final Position position) {
+        List<Position> positions = getMovesForRequest(position);
+        List<String> moves = new ArrayList<>();
+        for(Position p : positions) {
+            moves.add(p.toString());
+        }
+        return moves;
+    }
+
     // Methode für die Requesteingabe, gibt alle möglichen Moves an den Client
     public List<Position> getMovesForRequest(final Position startPos) {
         ChessPiece piece = board.getPiece(startPos.getY(), startPos.getX());

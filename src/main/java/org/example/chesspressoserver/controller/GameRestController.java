@@ -16,6 +16,7 @@ import org.example.chesspressoserver.service.LobbyService;
 import org.example.chesspressoserver.models.Lobby;
 import org.example.chesspressoserver.models.GameTime;
 import org.example.chesspressoserver.models.LobbyStatus;
+import org.example.chesspressoserver.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -35,12 +36,14 @@ public class GameRestController {
     private final GameManager gameManager;
     private final SimpMessagingTemplate messagingTemplate;
     private final LobbyService lobbyService;
+    private final UserService userService;
 
     @Autowired
-    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService) {
+    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
         this.lobbyService = lobbyService;
+        this.userService = userService;
     }
 
     @MessageMapping("/game/start")
@@ -63,8 +66,10 @@ public class GameRestController {
             }
         }
         lobby.setRandomColors(request.isRandomPlayers());
+
         String whitePlayer = request.getWhitePlayer();
         String blackPlayer = request.getBlackPlayer();
+
         if (request.isRandomPlayers()) {
             List<String> players = lobby.getPlayers();
             if (players == null || players.size() != 2) {
@@ -79,6 +84,10 @@ public class GameRestController {
         lobby.setBlackPlayer(blackPlayer);
         lobby.setGameStarted(true);
         lobby.setStatus(LobbyStatus.IN_GAME);
+
+        String whitePlayerName = userService.getUsernameById(whitePlayer);
+        String blackPlayerName = userService.getUsernameById(blackPlayer);
+
         gameManager.startGame(request.getLobbyId());
         // WebSocket-Benachrichtigung an alle Clients der Lobby
         messagingTemplate.convertAndSend(
@@ -88,8 +97,8 @@ public class GameRestController {
                 "success", true,
                 "lobbyId", request.getLobbyId() ,
                 "gameTime", request.getGameTime(),
-                "whitePlayer", whitePlayer ,
-                "blackPlayer", blackPlayer ,
+                "whitePlayer", whitePlayerName ,
+                "blackPlayer", blackPlayerName ,
                 "randomPlayers", request.isRandomPlayers(),
                 "board", getBoardForLobby(request.getLobbyId())
             )
@@ -99,8 +108,8 @@ public class GameRestController {
             true,
             request.getLobbyId(),
             request.getGameTime(),
-            whitePlayer,
-            blackPlayer,
+            whitePlayerName,
+            blackPlayerName,
             "/topic/lobby/" + request.getLobbyId(),
             getBoardForLobby(request.getLobbyId()),
             null

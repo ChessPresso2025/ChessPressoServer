@@ -29,11 +29,15 @@ public class GameMessageController {
         this.messagingTemplate = messagingTemplate;
     }
 
-    @MessageMapping("/game/request")
-    @SendTo("/topic/game/possibleMoves")
-    public List<Position> handleRequest(@Payload PositionRequest request) {
+    @MessageMapping("/game/position-request")
+    public void handleRequest(@Payload PositionRequest request) {
+        String lobbyId = request.lobbyId;
         Position position = new Position(request.getPosition());
-        return gameController.getMovesForRequest(position);
+        List<String> moves = gameController.getMovesForRequestAsString(position);
+        messagingTemplate.convertAndSend(
+                "/topic/game/" + lobbyId + "/possible-moves",
+                Map.of("type", "possible-moves", "possibleMoves", moves)
+        );
     }
 
     @MessageMapping("/game/move")
@@ -99,6 +103,7 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class PositionRequest {
+        private String lobbyId;
         private String position;
     }
 

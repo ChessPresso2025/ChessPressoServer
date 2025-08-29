@@ -65,7 +65,7 @@ public class GameMessageController {
                 "/topic/game/" + moveRequest.lobbyId + "/move",
                 Map.of(
                     "type", "move",
-                    "move", new MoveResponse(moveRequest.lobbyId, move),
+                    "move", move,
                     "board", boardMap,
                     "activeTeam", gameController.getAktiveTeam(),
                     "check", checkedKingPosition != null ? checkedKingPosition.getPos() : null

@@ -15,7 +15,7 @@ public class GameManager {
 
     @Autowired
     public GameManager(SimpMessagingTemplate messagingTemplate) {
-        this.messagingTemplate = messagingTemplate;
+        this.messagingTemplate = null;
     }
 
     public void startGame(String lobbyId) {

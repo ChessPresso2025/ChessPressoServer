@@ -40,12 +40,16 @@ public class GameMessageController {
             Position start = new Position(moveRequest.getFrom());
             Position end = new Position(moveRequest.getTo());
 
-            PieceType promotionType = null;
-            if (moveRequest.getPromotionType() != null && !moveRequest.getPromotionType().isEmpty()) {
-                promotionType = PieceType.valueOf(moveRequest.getPromotionType());
+            PieceType promotedPiece = moveRequest.getPromotedPiece();
+            System.out.println("Zu umwandelnde Figur: " + promotedPiece);
+            //check pawn promotion before applyMove()
+            ChessPiece moving = gameController.getBoard().getPiece(start.getY(), start.getX());
+            boolean isPromotion = checkPromotion(end, moving);
+            if(isPromotion && (promotedPiece == null || promotedPiece == PieceType.NULL)) {
+                messagingTemplate.convertAndSend("/topic/game/" + moveRequest.lobbyId + "/move/promotion", new PromotionRequest(moveRequest.to, moveRequest.from, moveRequest.teamColor));
+                return;
             }
-
-            Move move = gameController.applyMove(start, end, promotionType);
+            Move move = gameController.applyMove(start, end, promotedPiece);
             Board board = gameController.getBoard();
             Map<String, PieceInfo> boardMap = getCurrentBoard();
 
@@ -84,6 +88,19 @@ public class GameMessageController {
         return boardMap;
     }
 
+
+
+    private boolean checkPromotion(Position end, ChessPiece moving) {
+        boolean isPromotion = false;
+        if (moving.getType() == PieceType.PAWN) {
+            if ((moving.getColour() == TeamColor.WHITE && end.getY() == 7) ||
+                    (moving.getColour() == TeamColor.BLACK && end.getY() == 0)) {
+                isPromotion = true;
+            }
+        }
+        return isPromotion;
+    }
+
     @Getter
     @Setter
     @NoArgsConstructor
@@ -101,7 +118,8 @@ public class GameMessageController {
         private String lobbyId;
         private String from;
         private String to;
-        private String promotionType;
+        private TeamColor teamColor;
+        private PieceType promotedPiece;
     }
 
     @Getter
@@ -115,6 +133,14 @@ public class GameMessageController {
         private TeamColor activeTeam;
         private String lobbyId;
         private SendMove move;
+    }
+
+    @Data
+    public static class PromotionRequest {
+        private final String type = "promotion";
+        private final String position;
+        private final String from;
+        private final TeamColor activeTeam;
     }
 
     @Getter

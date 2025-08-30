@@ -66,6 +66,20 @@ public class GameController {
             if (piece.getType() == PieceType.PAWN) {
                 addEnPassantMoves(startPos, moves);
             }
+
+            // Wenn der König im Schach steht
+            Position myKing = board.getKingPosition(me);
+            if (myKing != null && isSquareAttackedBy(enemy, myKing)) {
+                List<Position> attackers = getAttackingPositions(myKing, enemy);
+                if (attackers.size() == 1) {  // Bei mehreren Angreifern kann nur der König sich bewegen
+                    Position attacker = attackers.get(0);
+                    // Behalte nur Züge, die den Angreifer schlagen oder zwischen König und Angreifer blockieren
+                    moves.removeIf(move -> !move.equals(attacker) && !isPositionBetween(move, myKing, attacker));
+                } else {
+                    moves.clear(); // Bei mehreren Angreifern kann diese Figur nichts tun
+                }
+            }
+
             // Pin-/Block-Schnittmenge bei geometrischer Verbindung zum eigenen König
             if (checkKingConnection(startPos)) {
                 List<Position> corridor = getKingConnectionPostion(startPos); // exkl. start, inkl. Angreifer
@@ -513,7 +527,7 @@ public class GameController {
     // =====================================================================
     //Methoden für Schachmattprüfung
     // =====================================================================
-    
+
     // Gibt alle Positionen zurück, von denen aus der König angegriffen wird.
     public List<Position> getAttackingPositions(Position kingPos, TeamColor attackingTeam) {
         List<Position> attackingPositions = new ArrayList<>();

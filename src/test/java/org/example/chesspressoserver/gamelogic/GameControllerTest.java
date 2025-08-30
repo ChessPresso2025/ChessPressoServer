@@ -5,7 +5,6 @@ import org.example.chesspressoserver.gamelogic.modles.CastlingRights;
 import org.example.chesspressoserver.models.gamemodels.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.List;
 
@@ -105,7 +104,7 @@ class GameControllerTest {
 
         Move move = controller.applyMove(whitePawnPos, epTarget, null);
 
-        assertEquals(SpezialMove.EnPassnt, move.getSpezialMove());
+        assertEquals(SpezialMove.EN_PASSANT, move.getSpezialMove());
         assertNotNull(move.getCaptured());
         assertEquals(PieceType.PAWN, move.getCaptured().getType());
         verify(boardMock).removePiece(4, 4); // Weißer Bauer zieht
@@ -131,7 +130,7 @@ class GameControllerTest {
 
         Move move = controller.applyMove(kingStart, kingEnd, null);
 
-        assertEquals(SpezialMove.Castling, move.getSpezialMove());
+        assertEquals(SpezialMove.CASTLING, move.getSpezialMove());
         verify(boardMock).removePiece(0, 4); // König zieht
         verify(boardMock).removePiece(0, 7); // Turm zieht
         verify(boardMock).setPiece(0, 6, king); // König auf g1
@@ -159,7 +158,7 @@ class GameControllerTest {
 
         Move move = controller.applyMove(kingStart, kingEnd, null);
 
-        assertEquals(SpezialMove.Castling, move.getSpezialMove());
+        assertEquals(SpezialMove.CASTLING, move.getSpezialMove());
         verify(boardMock).removePiece(0, 4); // König zieht
         verify(boardMock).removePiece(0, 0); // Turm zieht
         verify(boardMock).setPiece(0, 2, king); // König auf c1

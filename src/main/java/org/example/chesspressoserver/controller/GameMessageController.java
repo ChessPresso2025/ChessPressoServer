@@ -1,17 +1,13 @@
 package org.example.chesspressoserver.controller;
 
+import lombok.*;
 import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.models.gamemodels.*;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.util.HashMap;
 import java.util.List;
@@ -28,11 +24,15 @@ public class GameMessageController {
         this.messagingTemplate = messagingTemplate;
     }
 
-    @MessageMapping("/game/request")
-    @SendTo("/topic/game/possibleMoves")
-    public List<Position> handleRequest(@Payload PositionRequest request) {
+    @MessageMapping("/game/position-request")
+    public void handleRequest(@Payload PositionRequest request) {
+        String lobbyId = request.lobbyId;
         Position position = new Position(request.getPosition());
-        return gameController.getMovesForRequest(position);
+        List<String> moves = gameController.getMovesForRequestAsString(position);
+        messagingTemplate.convertAndSend(
+                "/topic/game/" + lobbyId + "/possible-moves",
+                Map.of("type", "possible-moves", "possibleMoves", moves)
+        );
     }
 
     @MessageMapping("/game/move")
@@ -51,17 +51,19 @@ public class GameMessageController {
 
             Position checkedKingPosition = null;
             TeamColor opposingTeam = gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
-            Position kingPos = board.getKingPosition(opposingTeam);
+            Position kingPos = board.getKingPosition(gameController.getAktiveTeam());
 
-            if (kingPos != null && gameController.isSquareAttackedBy(gameController.getAktiveTeam(), kingPos)) {
+            if (kingPos != null && gameController.isSquareAttackedBy(opposingTeam, kingPos)) {
                 checkedKingPosition = kingPos;
             }
 
             String isCheck = checkedKingPosition != null ? checkedKingPosition.getPos() : "";
 
+            SendMove sendMove = new SendMove(move);
+
             messagingTemplate.convertAndSend(
                 "/topic/game/" + moveRequest.lobbyId + "/move",
-                    new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(), moveRequest.lobbyId, move)
+                    new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(), moveRequest.lobbyId, sendMove)
             );
     }
 
@@ -74,6 +76,8 @@ public class GameMessageController {
                 ChessPiece piece = board.getPiece(y, x);
                 if (piece != null) {
                     boardMap.put(pos.toString(), new PieceInfo(piece.getType(), piece.getColour()));
+                }else{
+                    boardMap.put(pos.toString(), new PieceInfo(PieceType.NULL, TeamColor.NULL));
                 }
             }
         }
@@ -85,6 +89,7 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class PositionRequest {
+        private String lobbyId;
         private String position;
     }
 
@@ -109,7 +114,7 @@ public class GameMessageController {
         private String isCheck;
         private TeamColor activeTeam;
         private String lobbyId;
-        private Move move;
+        private SendMove move;
     }
 
     @Getter
@@ -118,6 +123,39 @@ public class GameMessageController {
     @AllArgsConstructor
     public static class PieceInfo {
         private PieceType type;
-        private TeamColor teamColor;
+        private TeamColor color;
+    }
+    @Data
+    public static class SendMove{
+        private final String start;
+        private final String end;
+        private final PieceType piece;
+        @Setter
+        private SpezialMove spezialMove;
+        @Setter
+        private SendCapturedInfo captured;
+        public SendMove(Move move) {
+            this.captured = new SendCapturedInfo(move.getCaptured());
+            this.spezialMove = move.getSpezialMove();
+            this.piece = move.getPiece();
+            this.end = move.getEnd().toString();
+            this.start = move.getStart().toString();
+        }
+    }
+
+    @Data
+    public static class SendCapturedInfo{
+        private PieceType type = null;
+        private TeamColor colour = null;
+        private String position = null;
+
+        public SendCapturedInfo(CapturedInfo capturedInfo) {
+            if(capturedInfo == null){
+                return;
+            }
+            this.type = capturedInfo.getType();
+            this.colour = capturedInfo.getColour();
+            this.position = capturedInfo.getPosition().toString();
+        }
     }
 }

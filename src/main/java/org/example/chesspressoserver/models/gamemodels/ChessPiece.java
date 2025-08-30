@@ -25,6 +25,7 @@ public class ChessPiece {
             case BISHOP-> new MoveBishop();
             case QUEEN -> new MoveQueen();
             case KING  -> new MoveKing();
+            case NULL -> null;
         };
     }
 }

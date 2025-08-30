@@ -1,22 +1,18 @@
 package org.example.chesspressoserver.gamelogic;
 
-import org.example.chesspressoserver.controller.GameMessageController;
 import org.springframework.stereotype.Service;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class GameManager {
-    private final Map<String, GameMessageController> games = new ConcurrentHashMap<>();
+    private final Map<String, GameController> games = new ConcurrentHashMap<>();
 
     public void startGame(String lobbyId) {
-        games.put(lobbyId, new GameMessageController(
-            new GameController(), null
-        ));
+        games.put(lobbyId, new GameController());
     }
 
-    public GameMessageController getGameByLobby(String lobbyId) {
+    public GameController getGameByLobby(String lobbyId) {
         return games.get(lobbyId);
     }
 
@@ -30,9 +26,7 @@ public class GameManager {
 
     public boolean rematch(String lobbyId) {
         if (games.containsKey(lobbyId)) {
-            games.put(lobbyId, new GameMessageController(
-                new GameController(), null
-            ));
+            games.put(lobbyId, new GameController());
             return true;
         }
         return false;

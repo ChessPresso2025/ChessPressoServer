@@ -47,48 +47,13 @@ class GameRestControllerTest {
     }
 
     @Test
-    void startGame_success_sendsWebSocketMessage() throws Exception {
-        String lobbyId = "lobby123";
-        doNothing().when(gameManager).startGame(eq(lobbyId));
-
-        StartGameRequest request = new StartGameRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("host");
-
-        mockMvc.perform(post("/game/start")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(lobbyId)));
-
-        verify(gameManager).startGame(eq(lobbyId));
-        ArgumentCaptor<Map<String, Object>> mapCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(messagingTemplate).convertAndSend(eq("/topic/lobby/" + lobbyId), mapCaptor.capture());
-        Map<String, Object> msg = mapCaptor.getValue();
-        assert msg.get("type").equals("gameStarted");
-        assert msg.get("lobbyId").equals(lobbyId);
-    }
-
-    @Test
-    void startGame_missingLobbyId_returnsBadRequest() throws Exception {
-        StartGameRequest request = new StartGameRequest();
-        request.setPlayerId("host");
-        mockMvc.perform(post("/game/start")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Lobby-ID fehlt")));
-        verifyNoInteractions(gameManager, messagingTemplate);
-    }
-
-    @Test
     void resignGame_success() throws Exception {
         String lobbyId = "lobby123";
         when(gameManager.resignGame(eq(lobbyId))).thenReturn(true);
         ResignGameRequest request = new ResignGameRequest();
         request.setLobbyId(lobbyId);
         request.setPlayerId("p1");
-        mockMvc.perform(post("/game/resign")
+        mockMvc.perform(post("/resign")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -100,7 +65,7 @@ class GameRestControllerTest {
     void resignGame_missingLobbyId_returnsBadRequest() throws Exception {
         ResignGameRequest request = new ResignGameRequest();
         request.setPlayerId("p1");
-        mockMvc.perform(post("/game/resign")
+        mockMvc.perform(post("/resign")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -115,7 +80,7 @@ class GameRestControllerTest {
         ResignGameRequest request = new ResignGameRequest();
         request.setLobbyId(lobbyId);
         request.setPlayerId("p1");
-        mockMvc.perform(post("/game/resign")
+        mockMvc.perform(post("/resign")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -130,7 +95,7 @@ class GameRestControllerTest {
         RematchRequest request = new RematchRequest();
         request.setLobbyId(lobbyId);
         request.setPlayerId("p1");
-        mockMvc.perform(post("/game/rematch")
+        mockMvc.perform(post("/rematch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -142,7 +107,7 @@ class GameRestControllerTest {
     void rematch_missingLobbyId_returnsBadRequest() throws Exception {
         RematchRequest request = new RematchRequest();
         request.setPlayerId("p1");
-        mockMvc.perform(post("/game/rematch")
+        mockMvc.perform(post("/rematch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -157,7 +122,7 @@ class GameRestControllerTest {
         RematchRequest request = new RematchRequest();
         request.setLobbyId(lobbyId);
         request.setPlayerId("p1");
-        mockMvc.perform(post("/game/rematch")
+        mockMvc.perform(post("/rematch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())

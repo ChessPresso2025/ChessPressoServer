@@ -510,6 +510,11 @@ public class GameController {
         }
     }
 
+    // =====================================================================
+    //Methoden für Schachmattprüfung
+    // =====================================================================
+    
+    // Gibt alle Positionen zurück, von denen aus der König angegriffen wird.
     public List<Position> getAttackingPositions(Position kingPos, TeamColor attackingTeam) {
         List<Position> attackingPositions = new ArrayList<>();
 
@@ -528,6 +533,7 @@ public class GameController {
         return attackingPositions;
     }
 
+    // Prüft ob der König im Schachmatt ist
     public boolean isCheckMate(Position kingPos, TeamColor defendingTeam) {
         // 1. Prüfe ob der König sich bewegen kann
         List<String> kingMoves = getMovesForRequestAsString(kingPos);
@@ -574,6 +580,7 @@ public class GameController {
         return true;
     }
 
+    // Prüft, ob pos zwischen start und end liegt (exkl. start und end), nur für gerade Linien (horizontal, vertikal, diagonal).
     private boolean isPositionBetween(Position pos, Position start, Position end) {
         // Vereinfachte Implementierung für gerade Linien (horizontal, vertikal, diagonal)
         int dx = Integer.compare(end.getX() - start.getX(), 0);

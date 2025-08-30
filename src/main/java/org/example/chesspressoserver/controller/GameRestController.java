@@ -117,10 +117,10 @@ public class GameRestController {
     }
 
     private Map<String, PieceInfo> getBoardForLobby(String lobbyId) {
-        GameMessageController gameController = gameManager.getGameByLobby(lobbyId);
+        GameController gameController = gameManager.getGameByLobby(lobbyId);
         Map<String, PieceInfo> boardMap = new HashMap<>();
         if (gameController == null) return boardMap;
-       Board board = gameController.getGameController().getBoard();
+       Board board = gameController.getBoard();
         for (int x = 0; x < 8; x++) {
             for (int y = 0; y < 8; y++) {
                 Position pos = new Position(x, y);

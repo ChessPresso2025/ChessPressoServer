@@ -1,5 +1,5 @@
 package org.example.chesspressoserver.models.gamemodels;
 
 public enum SpezialMove {
-    Castling, PawnPromotion, EnPassnt;
+    CASTLING, PAWN_PROMOTION, EN_PASSANT;
 }

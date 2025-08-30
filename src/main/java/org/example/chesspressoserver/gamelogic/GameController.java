@@ -125,7 +125,7 @@ public class GameController {
                 if (epVictim != null) {
                     result.setCaptured(new CapturedInfo(epVictim.getType(), epVictim.getColour(), epVictimPos));
                 }
-                result.setSpezialMove(SpezialMove.EnPassnt);
+                result.setSpezialMove(SpezialMove.EN_PASSANT);
             }
         }
 
@@ -135,12 +135,12 @@ public class GameController {
             if ((moving.getColour() == TeamColor.WHITE && end.getY() == 7) ||
                     (moving.getColour() == TeamColor.BLACK && end.getY() == 0)) {
                 isPromotion = true;
-                result.setSpezialMove(SpezialMove.PawnPromotion);
+                result.setSpezialMove(SpezialMove.PAWN_PROMOTION);
             }
         }
 
         if (isCastle) {
-            result.setSpezialMove(SpezialMove.Castling);
+            result.setSpezialMove(SpezialMove.CASTLING);
         }
 
         // --- Board mutieren ---

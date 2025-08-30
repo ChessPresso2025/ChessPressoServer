@@ -5,6 +5,7 @@ import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.models.gamemodels.*;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import lombok.AllArgsConstructor;
@@ -18,25 +19,19 @@ import java.util.Map;
 
 @Controller
 public class GameMessageController {
-    @Getter
     private final GameController gameController;
     private final SimpMessagingTemplate messagingTemplate;
-
 
     public GameMessageController(GameController gameController, SimpMessagingTemplate messagingTemplate) {
         this.gameController = gameController;
         this.messagingTemplate = messagingTemplate;
-
     }
 
-    @MessageMapping("/game/position-request")
-    public void handleRequest(@Payload PositionRequest request) {
+    @MessageMapping("/game/request")
+    @SendTo("/topic/game/possibleMoves")
+    public List<Position> handleRequest(@Payload PositionRequest request) {
         Position position = new Position(request.getPosition());
-        List<String> moves = gameController.getMovesForRequestAsString(position);
-        messagingTemplate.convertAndSend(
-                "/topic/game/" + request.lobbyId + "/possible-moves",
-                Map.of("type", "possible-moves", "possibleMoves", moves)
-        );
+        return gameController.getMovesForRequest(position);
     }
 
     @MessageMapping("/game/move")
@@ -61,15 +56,11 @@ public class GameMessageController {
                 checkedKingPosition = kingPos;
             }
 
+            String isCheck = checkedKingPosition != null ? checkedKingPosition.getPos() : "";
+
             messagingTemplate.convertAndSend(
                 "/topic/game/" + moveRequest.lobbyId + "/move",
-                Map.of(
-                    "type", "move",
-                    "move", move,
-                    "board", boardMap,
-                    "activeTeam", gameController.getAktiveTeam(),
-                    "check", checkedKingPosition != null ? checkedKingPosition.getPos() : null
-                )
+                    new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(), moveRequest.lobbyId, move)
             );
     }
 
@@ -82,12 +73,25 @@ public class GameMessageController {
                 ChessPiece piece = board.getPiece(y, x);
                 if (piece != null) {
                     boardMap.put(pos.toString(), new PieceInfo(piece.getType(), piece.getColour()));
-                }else  {
-                    boardMap.put(pos.toString(), new PieceInfo(null, null));
                 }
             }
         }
-        return boardMap;
+
+        // Überprüfe auf Schach
+        Position checkedKingPosition = null;
+        Position kingPos = board.getKingPosition(gameController.getAktiveTeam());
+        if (kingPos != null && gameController.isSquareAttackedBy(
+                gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE,
+                kingPos)) {
+            checkedKingPosition = kingPos;
+        }
+
+        // Sende Board-Update
+        messagingTemplate.convertAndSend("/topic/game/board", boardMap);
+
+        // Sende Move-Info mit Schach-Position
+        MoveResponse moveResponse = new MoveResponse(move, checkedKingPosition);
+        messagingTemplate.convertAndSend("/topic/game/move", moveResponse);
     }
 
     @Getter
@@ -95,7 +99,6 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class PositionRequest {
-        private String lobbyId;
         private String position;
     }
 
@@ -104,7 +107,6 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class MoveRequest {
-        private String lobbyId;
         private String from;
         private String to;
         private String promotionType;
@@ -115,8 +117,13 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class MoveResponse {
+        private final String type = "move";
+        private Map <String, PieceInfo> board;
+        private String isCheck;
+        private TeamColor activeTeam;
         private String lobbyId;
         private Move move;
+        private Position checkedKingPosition; // null wenn kein Schach
     }
 
     @Getter

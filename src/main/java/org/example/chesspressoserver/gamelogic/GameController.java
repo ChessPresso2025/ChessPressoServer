@@ -509,4 +509,83 @@ public class GameController {
             }
         }
     }
+
+    public List<Position> getAttackingPositions(Position kingPos, TeamColor attackingTeam) {
+        List<Position> attackingPositions = new ArrayList<>();
+
+        for(int x = 0; x < 8; x++) {
+            for(int y = 0; y < 8; y++) {
+                Position pos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y, x);
+                if(piece != null && piece.getColour() == attackingTeam) {
+                    List<String> possibleMoves = getMovesForRequestAsString(pos);
+                    if(possibleMoves.contains(kingPos.getPos())) {
+                        attackingPositions.add(pos);
+                    }
+                }
+            }
+        }
+        return attackingPositions;
+    }
+
+    public boolean isCheckMate(Position kingPos, TeamColor defendingTeam) {
+        // 1. Prüfe ob der König sich bewegen kann
+        List<String> kingMoves = getMovesForRequestAsString(kingPos);
+        if(!kingMoves.isEmpty()) {
+            return false;
+        }
+
+        // 2. Hole alle angreifenden Positionen
+        TeamColor attackingTeam = defendingTeam == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
+        List<Position> attackers = getAttackingPositions(kingPos, attackingTeam);
+
+        // Wenn mehr als ein Angreifer und der König sich nicht bewegen kann, ist es Schachmatt
+        if(attackers.size() > 1) {
+            return true;
+        }
+
+        // 3. Bei einem Angreifer: Prüfe ob eine verteidigende Figur den Angreifer schlagen oder blocken kann
+        Position attacker = attackers.get(0);
+
+        // Prüfe alle verteidigenden Figuren
+        for(int x = 0; x < 8; x++) {
+            for(int y = 0; y < 8; y++) {
+                Position defenderPos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y, x);
+                if(piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
+                    List<String> moves = getMovesForRequestAsString(defenderPos);
+
+                    // Kann der Angreifer geschlagen werden?
+                    if(moves.contains(attacker.getPos())) {
+                        return false;
+                    }
+
+                    // Kann eine Figur zwischen König und Angreifer ziehen?
+                    for(String move : moves) {
+                        Position blockingPos = new Position(move);
+                        if(isPositionBetween(blockingPos, kingPos, attacker)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private boolean isPositionBetween(Position pos, Position start, Position end) {
+        // Vereinfachte Implementierung für gerade Linien (horizontal, vertikal, diagonal)
+        int dx = Integer.compare(end.getX() - start.getX(), 0);
+        int dy = Integer.compare(end.getY() - start.getY(), 0);
+
+        Position current = new Position(start.getX() + dx, start.getY() + dy);
+        while(!current.equals(end)) {
+            if(current.equals(pos)) {
+                return true;
+            }
+            current = new Position(current.getX() + dx, current.getY() + dy);
+        }
+        return false;
+    }
 }

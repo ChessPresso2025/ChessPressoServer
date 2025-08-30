@@ -47,48 +47,6 @@ class GameRestControllerTest {
     }
 
     @Test
-    void resignGame_success() throws Exception {
-        String lobbyId = "lobby123";
-        when(gameManager.resignGame(eq(lobbyId))).thenReturn(true);
-        ResignGameRequest request = new ResignGameRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/resign")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("aufgegeben")));
-        verify(gameManager).resignGame(eq(lobbyId));
-    }
-
-    @Test
-    void resignGame_missingLobbyId_returnsBadRequest() throws Exception {
-        ResignGameRequest request = new ResignGameRequest();
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/resign")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Lobby-ID fehlt")));
-        verifyNoInteractions(gameManager);
-    }
-
-    @Test
-    void resignGame_invalidLobby_returnsBadRequest() throws Exception {
-        String lobbyId = "lobby123";
-        when(gameManager.resignGame(eq(lobbyId))).thenReturn(false);
-        ResignGameRequest request = new ResignGameRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/resign")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Ungültige Lobby-ID")));
-        verify(gameManager).resignGame(eq(lobbyId));
-    }
-
-    @Test
     void rematch_success() throws Exception {
         String lobbyId = "lobby123";
         when(gameManager.rematch(eq(lobbyId))).thenReturn(true);

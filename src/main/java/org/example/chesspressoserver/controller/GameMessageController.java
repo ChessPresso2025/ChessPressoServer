@@ -19,6 +19,7 @@ import java.util.Map;
 
 @Controller
 public class GameMessageController {
+    @Getter
     private final GameController gameController;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -76,22 +77,7 @@ public class GameMessageController {
                 }
             }
         }
-
-        // Überprüfe auf Schach
-        Position checkedKingPosition = null;
-        Position kingPos = board.getKingPosition(gameController.getAktiveTeam());
-        if (kingPos != null && gameController.isSquareAttackedBy(
-                gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE,
-                kingPos)) {
-            checkedKingPosition = kingPos;
-        }
-
-        // Sende Board-Update
-        messagingTemplate.convertAndSend("/topic/game/board", boardMap);
-
-        // Sende Move-Info mit Schach-Position
-        MoveResponse moveResponse = new MoveResponse(move, checkedKingPosition);
-        messagingTemplate.convertAndSend("/topic/game/move", moveResponse);
+        return boardMap;
     }
 
     @Getter
@@ -107,6 +93,7 @@ public class GameMessageController {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class MoveRequest {
+        private String lobbyId;
         private String from;
         private String to;
         private String promotionType;
@@ -123,7 +110,6 @@ public class GameMessageController {
         private TeamColor activeTeam;
         private String lobbyId;
         private Move move;
-        private Position checkedKingPosition; // null wenn kein Schach
     }
 
     @Getter

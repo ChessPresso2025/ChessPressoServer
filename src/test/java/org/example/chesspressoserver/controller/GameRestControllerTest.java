@@ -1,132 +1,75 @@
 package org.example.chesspressoserver.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.example.chesspressoserver.gamelogic.GameManager;
-import org.example.chesspressoserver.models.requests.StartGameRequest;
-import org.example.chesspressoserver.models.requests.ResignGameRequest;
-import org.example.chesspressoserver.models.requests.RematchRequest;
+import org.example.chesspressoserver.models.GameEntity;
+import org.example.chesspressoserver.models.MoveEntity;
+import org.example.chesspressoserver.service.GameHistoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 import org.springframework.http.MediaType;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.util.Map;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.mockito.ArgumentMatchers.any;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@ExtendWith(MockitoExtension.class)
 class GameRestControllerTest {
-
     private MockMvc mockMvc;
-
     @Mock
-    private GameManager gameManager;
-
-    @Mock
-    private SimpMessagingTemplate messagingTemplate;
+    private GameHistoryService gameHistoryService;
 
     @InjectMocks
     private GameRestController gameRestController;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
-
     @BeforeEach
     void setUp() {
-        reset(gameManager, messagingTemplate);
+        MockitoAnnotations.openMocks(this);
         mockMvc = MockMvcBuilders.standaloneSetup(gameRestController).build();
     }
 
     @Test
-    void resignGame_success() throws Exception {
-        String lobbyId = "lobby123";
-        when(gameManager.resignGame(eq(lobbyId))).thenReturn(true);
-        ResignGameRequest request = new ResignGameRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/resign")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+    void getLast10GamesWithMoves_returnsGamesWithMoves() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID gameId = UUID.randomUUID();
+        GameEntity game = new GameEntity();
+        game.setId(gameId);
+        game.setUserId(userId);
+        game.setStartedAt(OffsetDateTime.now());
+        game.setEndedAt(OffsetDateTime.now());
+        game.setResult("1-0");
+
+        MoveEntity move = new MoveEntity();
+        move.setId(UUID.randomUUID());
+        move.setGame(game);
+        move.setMoveNumber(1);
+        move.setMoveNotation("e4");
+        move.setCreatedAt(OffsetDateTime.now());
+        game.setMoves(List.of(move));
+
+        Mockito.when(gameHistoryService.getLast10GamesWithMoves(any(UUID.class))).thenReturn(List.of(game));
+
+        mockMvc.perform(get("/api/games/history/" + userId)
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("aufgegeben")));
-        verify(gameManager).resignGame(eq(lobbyId));
+                .andExpect(jsonPath("$[0].id").value(gameId.toString()))
+                .andExpect(jsonPath("$[0].moves[0].moveNotation").value("e4"));
     }
 
     @Test
-    void resignGame_missingLobbyId_returnsBadRequest() throws Exception {
-        ResignGameRequest request = new ResignGameRequest();
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/resign")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Lobby-ID fehlt")));
-        verifyNoInteractions(gameManager);
-    }
-
-    @Test
-    void resignGame_invalidLobby_returnsBadRequest() throws Exception {
-        String lobbyId = "lobby123";
-        when(gameManager.resignGame(eq(lobbyId))).thenReturn(false);
-        ResignGameRequest request = new ResignGameRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/resign")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Ungültige Lobby-ID")));
-        verify(gameManager).resignGame(eq(lobbyId));
-    }
-
-    @Test
-    void rematch_success() throws Exception {
-        String lobbyId = "lobby123";
-        when(gameManager.rematch(eq(lobbyId))).thenReturn(true);
-        RematchRequest request = new RematchRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/rematch")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
+    void getLast10GamesWithMoves_returnsEmptyListIfNoGames() throws Exception {
+        UUID userId = UUID.randomUUID();
+        Mockito.when(gameHistoryService.getLast10GamesWithMoves(any(UUID.class))).thenReturn(List.of());
+        mockMvc.perform(get("/api/games/history/" + userId)
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(lobbyId)));
-        verify(gameManager).rematch(eq(lobbyId));
-    }
-
-    @Test
-    void rematch_missingLobbyId_returnsBadRequest() throws Exception {
-        RematchRequest request = new RematchRequest();
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/rematch")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Lobby-ID fehlt")));
-        verifyNoInteractions(gameManager);
-    }
-
-    @Test
-    void rematch_invalidLobby_returnsBadRequest() throws Exception {
-        String lobbyId = "lobby123";
-        when(gameManager.rematch(eq(lobbyId))).thenReturn(false);
-        RematchRequest request = new RematchRequest();
-        request.setLobbyId(lobbyId);
-        request.setPlayerId("p1");
-        mockMvc.perform(post("/rematch")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Ungültige Lobby-ID")));
-        verify(gameManager).rematch(eq(lobbyId));
+                .andExpect(content().json("[]"));
     }
 }

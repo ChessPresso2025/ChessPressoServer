@@ -1,10 +1,14 @@
 package org.example.chesspressoserver.controller;
 
+import org.example.chesspressoserver.dto.GameHistoryDto;
 import org.example.chesspressoserver.dto.GameStartResponse;
+import org.example.chesspressoserver.dto.MoveDto;
 import org.example.chesspressoserver.dto.PieceInfo;
 import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.gamelogic.modles.Board;
+import org.example.chesspressoserver.models.GameEntity;
+import org.example.chesspressoserver.models.MoveEntity;
 import org.example.chesspressoserver.models.gamemodels.ChessPiece;
 import org.example.chesspressoserver.models.gamemodels.PieceType;
 import org.example.chesspressoserver.models.gamemodels.Position;
@@ -13,6 +17,7 @@ import org.example.chesspressoserver.models.requests.RematchRequest;
 import org.example.chesspressoserver.models.requests.ResignGameRequest;
 import org.example.chesspressoserver.models.requests.StartGameRequest;
 import org.example.chesspressoserver.service.LobbyService;
+import org.example.chesspressoserver.service.GameHistoryService;
 import org.example.chesspressoserver.models.Lobby;
 import org.example.chesspressoserver.models.GameTime;
 import org.example.chesspressoserver.models.LobbyStatus;
@@ -29,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Controller
 public class GameRestController {
@@ -37,13 +43,15 @@ public class GameRestController {
     private final SimpMessagingTemplate messagingTemplate;
     private final LobbyService lobbyService;
     private final UserService userService;
+    private final GameHistoryService gameHistoryService;
 
     @Autowired
-    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService) {
+    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService, GameHistoryService gameHistoryService) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
         this.lobbyService = lobbyService;
         this.userService = userService;
+        this.gameHistoryService = gameHistoryService;
     }
 
     @MessageMapping("/game/start")
@@ -159,5 +167,32 @@ public class GameRestController {
         } else {
             return ResponseEntity.badRequest().body("Ungültige Lobby-ID für Rematch");
         }
+    }
+
+    @GetMapping("/api/games/history/{userId}")
+    @ResponseBody
+    public List<GameHistoryDto> getLast10GamesWithMoves(@PathVariable("userId") String userId) {
+        List<GameEntity> games = gameHistoryService.getLast10GamesWithMoves(UUID.fromString(userId));
+        List<GameHistoryDto> result = new ArrayList<>();
+        for (GameEntity game : games) {
+            GameHistoryDto dto = new GameHistoryDto();
+            dto.id = game.getId();
+            dto.startedAt = game.getStartedAt();
+            dto.endedAt = game.getEndedAt();
+            dto.result = game.getResult();
+            dto.moves = new ArrayList<MoveDto>();
+            if (game.getMoves() != null) {
+                for (MoveEntity move : game.getMoves()) {
+                    MoveDto m = new MoveDto();
+                    m.id = move.getId();
+                    m.moveNumber = move.getMoveNumber();
+                    m.moveNotation = move.getMoveNotation();
+                    m.createdAt = move.getCreatedAt();
+                    dto.moves.add(m);
+                }
+            }
+            result.add(dto);
+        }
+        return result;
     }
 }

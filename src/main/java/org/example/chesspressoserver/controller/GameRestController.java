@@ -1,16 +1,17 @@
 package org.example.chesspressoserver.controller;
 
+import lombok.Data;
 import org.example.chesspressoserver.dto.GameStartResponse;
 import org.example.chesspressoserver.dto.PieceInfo;
 import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.gamelogic.modles.Board;
+import org.example.chesspressoserver.models.EndType;
 import org.example.chesspressoserver.models.gamemodels.ChessPiece;
 import org.example.chesspressoserver.models.gamemodels.PieceType;
 import org.example.chesspressoserver.models.gamemodels.Position;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;
 import org.example.chesspressoserver.models.requests.RematchRequest;
-import org.example.chesspressoserver.models.requests.ResignGameRequest;
 import org.example.chesspressoserver.models.requests.StartGameRequest;
 import org.example.chesspressoserver.service.LobbyService;
 import org.example.chesspressoserver.models.Lobby;
@@ -20,6 +21,7 @@ import org.example.chesspressoserver.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -135,19 +137,6 @@ public class GameRestController {
         return boardMap;
     }
 
-    @PostMapping("/resign")
-    public ResponseEntity<?> resignGame(@RequestBody ResignGameRequest request) {
-        if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
-            return ResponseEntity.badRequest().body("Lobby-ID fehlt");
-        }
-        boolean success = gameManager.resignGame(request.getLobbyId());
-        if (success) {
-            return ResponseEntity.ok().body("Spiel für Lobby aufgegeben");
-        } else {
-            return ResponseEntity.badRequest().body("Ungültige Lobby-ID");
-        }
-    }
-
     @PostMapping("/rematch")
     public ResponseEntity<?> requestRematch(@RequestBody RematchRequest request) {
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
@@ -158,6 +147,84 @@ public class GameRestController {
             return ResponseEntity.ok().body("Rematch gestartet für Lobby-ID: " + request.getLobbyId());
         } else {
             return ResponseEntity.badRequest().body("Ungültige Lobby-ID für Rematch");
+        }
+    }
+
+    @MessageMapping("/game/end")
+    public void handleGameEnd(@Payload GameEndMessage message) {
+        if (message.getLobbyId() == null || message.getLobbyId().isEmpty() || message.getPlayer() == null || message.getPlayer() == TeamColor.NULL) {
+            return;
+        }
+        Lobby lobby = lobbyService.getLobby(message.getLobbyId());
+        if (lobby == null) {
+            return;
+        }
+        EndType endType = message.endType;
+
+        switch(endType) {
+            case RESIGNATION: onResign(message, lobby); break;
+            case AGREED_DRAW: onDraw(message, lobby); break;
+            case TIMEOUT: onTimeout(message, lobby); break;
+        }
+    }
+
+    private void onTimeout(GameEndMessage message, Lobby lobby) {
+        //TODO
+    }
+
+    private void onDraw(GameEndMessage message, Lobby lobby) {
+        //TODO
+    }
+
+    private void onResign(GameEndMessage message, Lobby lobby) {
+        boolean success = gameManager.resignGame(message.getLobbyId());
+        String loser; String winner;
+        if(message.getPlayer() == TeamColor.WHITE){
+            loser = lobby.getWhitePlayer();
+            winner = lobby.getBlackPlayer();
+        }else{
+            loser =  lobby.getBlackPlayer();
+            winner = lobby.getWhitePlayer();
+        }
+        if (success) {
+            // Benachrichtige alle Clients in der Lobby, dass das Spiel aufgegeben wurde
+            messagingTemplate.convertAndSend(
+                    "/topic/lobby/" + message.getLobbyId(), new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId())
+            );
+        } else {
+            // Optional: Fehlernachricht senden
+            messagingTemplate.convertAndSend(
+                    "/topic/lobby/" + message.getLobbyId(),
+                    Map.of(
+                            "type", "gameResigned",
+                            "lobbyId", message.getLobbyId(),
+                            "player", message.getPlayer(),
+                            "success", false,
+                            "error", "Ungültige Lobby-ID oder Aufgabe nicht möglich"
+                    )
+            );
+        }
+    }
+
+    @Data
+    public static class GameEndMessage {
+        private String lobbyId;
+        private TeamColor player;
+        private EndType endType;
+    }
+
+    @Data
+    public static class GameEndResponse{
+        private String winner;
+        private String loser;
+        private boolean draw;
+        private String lobbyId;
+        private final String type = "game-end";
+        public GameEndResponse(String winner, String loser,  boolean draw, String lobbyId) {
+            this.winner = winner;
+            this.loser = loser;
+            this.draw = draw;
+            this.lobbyId = lobbyId;
         }
     }
 }

@@ -223,30 +223,22 @@ public class GameRestController {
         }
     }
 
-    private void onTimeout(GameEndMessage message, Lobby lobby) {
-        updateGameEndInDatabase(message.getLobbyId(), "TIMEOUT");
-        //TODO: weitere Logik für Timeout
-    }
-
-    private void onDraw(GameEndMessage message, Lobby lobby) {
-        updateGameEndInDatabase(message.getLobbyId(), "DRAW");
-        //TODO: weitere Logik für Remis
-    }
-
-    private void onResign(GameEndMessage message, Lobby lobby) {
-        boolean success = gameManager.resignGame(message.getLobbyId());
+    private void handleGameEndCommon(GameEndMessage message, Lobby lobby, EndType endType, boolean callResignGame) {
         String loser;
         String winner;
-        String result;
         Optional<User> whiteUserOpt = userService.getUserByUsername(lobby.getWhitePlayer());
         Optional<User> blackUserOpt = userService.getUserByUsername(lobby.getBlackPlayer());
         UUID whiteId = whiteUserOpt.map(User::getId).orElse(null);
         UUID blackId = blackUserOpt.map(User::getId).orElse(null);
+        String result;
+        boolean success = true;
+        if (callResignGame) {
+            success = gameManager.resignGame(message.getLobbyId());
+        }
         if (message.getPlayer() == TeamColor.WHITE) {
             loser = lobby.getWhitePlayer();
             winner = lobby.getBlackPlayer();
             result = "BLACK_WIN";
-            // Statistik aktualisieren
             if (whiteId != null) {
                 StatsReportRequest whiteLoss = new StatsReportRequest();
                 whiteLoss.setResult("LOSS");
@@ -261,7 +253,6 @@ public class GameRestController {
             loser = lobby.getBlackPlayer();
             winner = lobby.getWhitePlayer();
             result = "WHITE_WIN";
-            // Statistik aktualisieren
             if (whiteId != null) {
                 StatsReportRequest whiteWin = new StatsReportRequest();
                 whiteWin.setResult("WIN");
@@ -274,16 +265,24 @@ public class GameRestController {
             }
         }
         updateGameEndInDatabase(message.getLobbyId(), result);
-        // Spiel aus GameManager entfernen
         gameManager.removeGameByLobbyId(message.getLobbyId());
-        if (success) {
-            // Benachrichtige alle Clients in der Lobby, dass das Spiel aufgegeben wurde
+        String reason = null;
+        switch (endType) {
+            case RESIGNATION:
+                reason = "RESIGN";
+                break;
+            case TIMEOUT:
+                reason = "TIMEOUT";
+                break;
+            default:
+                reason = "NORMAL";
+        }
+        if (!callResignGame || success) {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
-                    new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId())
+                    new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId(), reason)
             );
         } else {
-            // Optional: Fehlernachricht senden
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
                     Map.of(
@@ -295,6 +294,23 @@ public class GameRestController {
                     )
             );
         }
+    }
+
+    private void onTimeout(GameEndMessage message, Lobby lobby) {
+        handleGameEndCommon(message, lobby, EndType.TIMEOUT, false);
+    }
+
+    private void onDraw(GameEndMessage message, Lobby lobby) {
+        updateGameEndInDatabase(message.getLobbyId(), "DRAW");
+        messagingTemplate.convertAndSend(
+                "/topic/lobby/" + message.getLobbyId(),
+                new GameEndResponse(null, null, true, lobby.getLobbyId(), "DRAW")
+        );
+        //TODO: weitere Logik für Remis
+    }
+
+    private void onResign(GameEndMessage message, Lobby lobby) {
+        handleGameEndCommon(message, lobby, EndType.RESIGNATION, true);
     }
 
 
@@ -312,12 +328,14 @@ public class GameRestController {
         private boolean draw;
         private String lobbyId;
         private final String type = "game-end";
+        private String reason;
 
-        public GameEndResponse(String winner, String loser, boolean draw, String lobbyId) {
+        public GameEndResponse(String winner, String loser, boolean draw, String lobbyId, String reason) {
             this.winner = winner;
             this.loser = loser;
             this.draw = draw;
             this.lobbyId = lobbyId;
+            this.reason = reason;
         }
     }
 }

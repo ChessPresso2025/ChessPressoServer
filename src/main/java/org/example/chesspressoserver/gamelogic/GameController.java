@@ -26,6 +26,12 @@ public class GameController {
     @Setter
     private Move lastMove;
 
+    @Setter
+    private int movesSincePawnMove = 0;  // Zähler für Züge ohne Bauernzug
+
+    @Setter
+    private int movesSinceCapture = 0;   // Zähler für Züge ohne Schlagen
+
     // Konstruktor
     public GameController() {
         this.board = new Board();
@@ -33,6 +39,8 @@ public class GameController {
         this.castlingRights = new CastlingRights();
         this.lastMove = null;
         board.start();
+        this.movesSincePawnMove = 0;
+        this.movesSinceCapture = 0;
     }
 
     // =====================================================================
@@ -71,19 +79,32 @@ public class GameController {
             Position myKing = board.getKingPosition(me);
             if (myKing != null && isSquareAttackedBy(enemy, myKing)) {
                 List<Position> attackers = getAttackingPositions(myKing, enemy);
-                if (attackers.size() == 1) {  // Bei mehreren Angreifern kann nur der König sich bewegen
-                    Position attacker = attackers.get(0);
-                    // Behalte nur Züge, die den Angreifer schlagen oder zwischen König und Angreifer blockieren
-                    moves.removeIf(move -> !move.equals(attacker) && !isPositionBetween(move, myKing, attacker));
-                } else {
-                    moves.clear(); // Bei mehreren Angreifern kann diese Figur nichts tun
+
+                // Bei Doppelschach kann nur der König ziehen
+                if (attackers.size() > 1) {
+                    moves.clear();
+                    return moves;
                 }
+
+                // Bei einzelnem Schach: Angreifer schlagen oder blockieren
+                Position attacker = attackers.get(0);
+
+                // Prüfe ob die Figur den Angreifer schlagen oder blockieren kann
+                List<Position> validMoves = new ArrayList<>();
+                for (Position move : moves) {
+                    if (move.equals(attacker) || isPositionBetween(move, myKing, attacker)) {
+                        validMoves.add(move);
+                    }
+                }
+                moves = validMoves;
             }
 
             // Pin-/Block-Schnittmenge bei geometrischer Verbindung zum eigenen König
             if (checkKingConnection(startPos)) {
-                List<Position> corridor = getKingConnectionPostion(startPos); // exkl. start, inkl. Angreifer
-                if (!corridor.isEmpty()) moves.retainAll(corridor);
+                List<Position> corridor = getKingConnectionPostion(startPos);
+                if (!corridor.isEmpty()) {
+                    moves.removeIf(move -> !corridor.contains(move));
+                }
             }
         }
 
@@ -116,6 +137,19 @@ public class GameController {
         boolean isPawn   = (moving.getType() == PieceType.PAWN);
         boolean isCastle = (moving.getType() == PieceType.KING) && (Math.abs(end.getX() - start.getX()) == 2);
         boolean isEP     = false;
+
+        // 50-Züge-Regel: Zähler aktualisieren
+        if (isPawn) {
+            movesSincePawnMove = 0;  // Bauernzug setzt Zähler zurück
+        } else {
+            movesSincePawnMove++;
+        }
+
+        if (targetAtEnd != null || isEP) {
+            movesSinceCapture = 0;   // Schlagen setzt Zähler zurück
+        } else {
+            movesSinceCapture++;
+        }
 
         // --- En Passant?
         Position epVictimPos = null;
@@ -647,9 +681,13 @@ public class GameController {
 
     // Prüft, ob Schach noch möglich ist
     public boolean noCheckPossible(){
+        //TODO implementieren
         return false;
     }
 
     //Drei Zug Regel
+    //TODO implementieren
+
+    //50-Züge-Regel
     //TODO implementieren
 }

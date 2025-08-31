@@ -530,6 +530,10 @@ public class GameController {
 
     // Gibt alle Positionen zurück, von denen aus der König angegriffen wird.
     public List<Position> getAttackingPositions(Position kingPos, TeamColor attackingTeam) {
+        if (kingPos == null || attackingTeam == null) {
+            return new ArrayList<>();
+        }
+
         List<Position> attackingPositions = new ArrayList<>();
 
         for(int x = 0; x < 8; x++) {
@@ -538,7 +542,7 @@ public class GameController {
                 ChessPiece piece = board.getPiece(y, x);
                 if(piece != null && piece.getColour() == attackingTeam) {
                     List<String> possibleMoves = getMovesForRequestAsString(pos);
-                    if(possibleMoves.contains(kingPos.getPos())) {
+                    if(possibleMoves != null && possibleMoves.contains(kingPos.getPos())) {
                         attackingPositions.add(pos);
                     }
                 }
@@ -547,17 +551,25 @@ public class GameController {
         return attackingPositions;
     }
 
-    // Prüft ob der König im Schachmatt ist
+    // Prüft, ob der König im Schachmatt ist
     public boolean isCheckMate(Position kingPos, TeamColor defendingTeam) {
+        if (kingPos == null || defendingTeam == null) {
+            return false;
+        }
+
         // 1. Prüfe ob der König sich bewegen kann
         List<String> kingMoves = getMovesForRequestAsString(kingPos);
-        if(!kingMoves.isEmpty()) {
+        if(kingMoves != null && !kingMoves.isEmpty()) {
             return false;
         }
 
         // 2. Hole alle angreifenden Positionen
         TeamColor attackingTeam = defendingTeam == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
         List<Position> attackers = getAttackingPositions(kingPos, attackingTeam);
+
+        if (attackers == null || attackers.isEmpty()) {
+            return false;
+        }
 
         // Wenn mehr als ein Angreifer und der König sich nicht bewegen kann, ist es Schachmatt
         if(attackers.size() > 1) {
@@ -574,6 +586,7 @@ public class GameController {
                 ChessPiece piece = board.getPiece(y, x);
                 if(piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
                     List<String> moves = getMovesForRequestAsString(defenderPos);
+                    if (moves == null) continue;
 
                     // Kann der Angreifer geschlagen werden?
                     if(moves.contains(attacker.getPos())) {
@@ -582,6 +595,7 @@ public class GameController {
 
                     // Kann eine Figur zwischen König und Angreifer ziehen?
                     for(String move : moves) {
+                        if (move == null) continue;
                         Position blockingPos = new Position(move);
                         if(isPositionBetween(blockingPos, kingPos, attacker)) {
                             return false;
@@ -609,4 +623,33 @@ public class GameController {
         }
         return false;
     }
+
+    // =====================================================================
+    // Pattsituation
+    // =====================================================================
+
+    // Prüft, ob das aktive Team keine legalen Züge mehr hat (Patt-Situation)
+    public boolean noMovesLeft(TeamColor team) {
+        for(int x = 0; x < 8; x++) {
+            for(int y = 0; y < 8; y++) {
+                Position pos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y, x);
+                if(piece != null && piece.getColour() == team) {
+                    List<String> possibleMoves = getMovesForRequestAsString(pos);
+                    if(!possibleMoves.isEmpty()) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    // Prüft, ob Schach noch möglich ist
+    public boolean noCheckPossible(){
+        return false;
+    }
+
+    //Drei Zug Regel
+    //TODO implementieren
 }

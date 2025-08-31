@@ -9,10 +9,13 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Getter
 public class GameController {
+
+    private UUID gameId;
 
     @Setter
     private Board board;
@@ -33,6 +36,11 @@ public class GameController {
         this.castlingRights = new CastlingRights();
         this.lastMove = null;
         board.start();
+    }
+
+    public GameController(UUID gameId) {
+        this();
+        this.gameId = gameId;
     }
 
     // =====================================================================

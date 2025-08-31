@@ -21,7 +21,7 @@ public class GameHistoryService {
     }
 
     public List<GameEntity> getLast10GamesWithMoves(UUID userId) {
-        List<GameEntity> games = gameRepository.findTop10ByUserIdOrderByStartedAtDesc(userId);
+        List<GameEntity> games = gameRepository.findTop10ByPlayerIdOrderByStartedAtDesc(userId);
         for (GameEntity game : games) {
             List<MoveEntity> moves = moveRepository.findByGameIdOrderByMoveNumberAsc(game.getId());
             game.setMoves(moves);

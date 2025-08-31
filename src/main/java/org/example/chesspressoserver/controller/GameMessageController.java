@@ -5,6 +5,10 @@ import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.models.gamemodels.*;
+import org.example.chesspressoserver.repository.MoveRepository;
+import org.example.chesspressoserver.repository.GameRepository;
+import org.example.chesspressoserver.models.MoveEntity;
+import org.example.chesspressoserver.models.GameEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
@@ -15,16 +19,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.OffsetDateTime;
 
 @Controller
 public class GameMessageController {
     @Getter
     private final GameManager gameManager;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MoveRepository moveRepository;
+    private final GameRepository gameRepository;
 
-    public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate) {
+    public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, MoveRepository moveRepository, GameRepository gameRepository) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
+        this.moveRepository = moveRepository;
+        this.gameRepository = gameRepository;
     }
 
     @MessageMapping("/game/position-request")
@@ -87,6 +96,20 @@ public class GameMessageController {
             new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(),
                 moveRequest.lobbyId, sendMove, checkMatePositions)
         );
+
+        // Nach applyMove: Zug in DB speichern
+        java.util.UUID gameId = gameController.getGameId();
+        GameEntity gameEntity = gameRepository.findById(gameId).orElse(null);
+        if (gameEntity != null) {
+            MoveEntity moveEntity = new MoveEntity();
+            moveEntity.setGame(gameEntity);
+            // moveNumber: Anzahl bisheriger Züge + 1
+            int moveNumber = moveRepository.findByGameIdOrderByMoveNumberAsc(gameId).size() + 1;
+            moveEntity.setMoveNumber(moveNumber);
+            moveEntity.setMoveNotation(move.toString());
+            moveEntity.setCreatedAt(OffsetDateTime.now());
+            moveRepository.save(moveEntity);
+        }
     }
 
     public Map<String, PieceInfo> getCurrentBoard(GameController gameController) {

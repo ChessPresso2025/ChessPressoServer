@@ -32,10 +32,12 @@ class GameHistoryServiceTest {
     @Test
     void getLast10GamesWithMoves_returnsGamesWithMoves() {
         UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         GameEntity game = new GameEntity();
         game.setId(gameId);
-        game.setUserId(userId);
+        game.setWhitePlayerId(userId);
+        game.setBlackPlayerId(otherUserId);
         game.setStartedAt(OffsetDateTime.now());
         game.setEndedAt(OffsetDateTime.now());
         game.setResult("1-0");
@@ -54,7 +56,7 @@ class GameHistoryServiceTest {
         move2.setMoveNotation("e5");
         move2.setCreatedAt(OffsetDateTime.now());
 
-        when(gameRepository.findTop10ByUserIdOrderByStartedAtDesc(userId)).thenReturn(List.of(game));
+        when(gameRepository.findTop10ByPlayerIdOrderByStartedAtDesc(userId)).thenReturn(List.of(game));
         when(moveRepository.findByGameIdOrderByMoveNumberAsc(gameId)).thenReturn(List.of(move1, move2));
 
         List<GameEntity> result = gameHistoryService.getLast10GamesWithMoves(userId);
@@ -67,9 +69,8 @@ class GameHistoryServiceTest {
     @Test
     void getLast10GamesWithMoves_returnsEmptyListIfNoGames() {
         UUID userId = UUID.randomUUID();
-        when(gameRepository.findTop10ByUserIdOrderByStartedAtDesc(userId)).thenReturn(Collections.emptyList());
+        when(gameRepository.findTop10ByPlayerIdOrderByStartedAtDesc(userId)).thenReturn(Collections.emptyList());
         List<GameEntity> result = gameHistoryService.getLast10GamesWithMoves(userId);
         assertTrue(result.isEmpty());
     }
 }
-

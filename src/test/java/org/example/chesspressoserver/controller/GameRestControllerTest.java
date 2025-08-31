@@ -3,6 +3,7 @@ package org.example.chesspressoserver.controller;
 import org.example.chesspressoserver.models.GameEntity;
 import org.example.chesspressoserver.models.MoveEntity;
 import org.example.chesspressoserver.service.GameHistoryService;
+import org.example.chesspressoserver.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +29,8 @@ class GameRestControllerTest {
     private MockMvc mockMvc;
     @Mock
     private GameHistoryService gameHistoryService;
+    @Mock
+    private UserService userService;
 
     @InjectMocks
     private GameRestController gameRestController;
@@ -36,15 +39,18 @@ class GameRestControllerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         mockMvc = MockMvcBuilders.standaloneSetup(gameRestController).build();
+        Mockito.when(userService.getUserByUsername(any(String.class))).thenReturn(java.util.Optional.empty());
     }
 
     @Test
     void getLast10GamesWithMoves_returnsGamesWithMoves() throws Exception {
         UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
         UUID gameId = UUID.randomUUID();
         GameEntity game = new GameEntity();
         game.setId(gameId);
-        game.setUserId(userId);
+        game.setWhitePlayerId(userId);
+        game.setBlackPlayerId(otherUserId);
         game.setStartedAt(OffsetDateTime.now());
         game.setEndedAt(OffsetDateTime.now());
         game.setResult("1-0");
@@ -57,7 +63,12 @@ class GameRestControllerTest {
         move.setCreatedAt(OffsetDateTime.now());
         game.setMoves(List.of(move));
 
-        Mockito.when(gameHistoryService.getLast10GamesWithMoves(any(UUID.class))).thenReturn(List.of(game));
+        // Mock userService so dass ein User mit userId zurückgegeben wird
+        org.example.chesspressoserver.models.User user = new org.example.chesspressoserver.models.User();
+        user.setId(userId);
+        Mockito.when(userService.getUserByUsername(userId.toString())).thenReturn(java.util.Optional.of(user));
+
+        Mockito.when(gameHistoryService.getLast10GamesWithMoves(userId)).thenReturn(List.of(game));
 
         mockMvc.perform(get("/api/games/history/" + userId)
                 .contentType(MediaType.APPLICATION_JSON))

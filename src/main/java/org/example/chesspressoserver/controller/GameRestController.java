@@ -320,36 +320,4 @@ public class GameRestController {
             this.lobbyId = lobbyId;
         }
     }
-
-    @GetMapping("/api/games/history/{userId}")
-    @ResponseBody
-    public List<GameHistoryDto> getLast10GamesWithMoves(@PathVariable("userId") String userId) {
-        Optional<User> user = userService.getUserByUsername(userId);
-        UUID userid = null;
-        if(user.isPresent()) {
-            userid = user.get().getId();
-        }
-        List<GameEntity> games = gameHistoryService.getLast10GamesWithMoves(userid);
-        List<GameHistoryDto> result = new ArrayList<>();
-        for ( GameEntity game : games) {
-            GameHistoryDto dto = new GameHistoryDto();
-            dto.id = game.getId();
-            dto.startedAt = game.getStartedAt();
-            dto.endedAt = game.getEndedAt();
-            dto.result = game.getResult();
-            dto.moves = new ArrayList<>();
-            if (game.getMoves() != null) {
-                for (MoveEntity move : game.getMoves()) {
-                    MoveDto m = new MoveDto();
-                    m.id = move.getId();
-                    m.moveNumber = move.getMoveNumber();
-                    m.moveNotation = move.getMoveNotation();
-                    m.createdAt = move.getCreatedAt();
-                    dto.moves.add(m);
-                }
-            }
-            result.add(dto);
-        }
-        return result;
-    }
 }

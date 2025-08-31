@@ -22,10 +22,14 @@ public class LobbyController {
 
     private final LobbyService lobbyService;
     private final UserService userService;
+    private final GameRestController gameRestController;
 
-    public LobbyController(LobbyService lobbyService, UserService userService) {
+    public LobbyController(LobbyService lobbyService, UserService userService, GameRestController gameRestController) {
         this.lobbyService = lobbyService;
         this.userService = userService;
+        this.gameRestController = gameRestController;
+        // Setze GameRestController im LobbyService für automatischen Spielstart
+        this.lobbyService.setGameRestController(gameRestController);
     }
 
 

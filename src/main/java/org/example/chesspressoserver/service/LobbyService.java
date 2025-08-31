@@ -1,8 +1,10 @@
 package org.example.chesspressoserver.service;
 
+import org.example.chesspressoserver.controller.GameRestController;
 import org.example.chesspressoserver.models.Lobby;
 import org.example.chesspressoserver.models.LobbyStatus;
 import org.example.chesspressoserver.models.GameTime;
+import org.example.chesspressoserver.models.requests.StartGameRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -26,6 +28,8 @@ public class LobbyService {
     private final Map<GameTime, Queue<String>> quickMatchQueues = new ConcurrentHashMap<>();
     private final UserService userService;
 
+    private GameRestController gameRestController;
+
     public LobbyService(LobbyCodeGenerator lobbyCodeGenerator, SimpMessagingTemplate messagingTemplate, UserService userService) {
         this.lobbyCodeGenerator = lobbyCodeGenerator;
         this.messagingTemplate = messagingTemplate;
@@ -38,6 +42,11 @@ public class LobbyService {
             quickMatchQueues.put(gameTime, new LinkedList<>());
         }
         this.userService = userService;
+    }
+
+    // Setter für GameRestController (für zirkuläre Abhängigkeit oder nachträgliches Setzen)
+    public void setGameRestController(GameRestController gameRestController) {
+        this.gameRestController = gameRestController;
     }
 
 
@@ -76,8 +85,32 @@ public class LobbyService {
                 lobby.addPlayer(playerId);
                 lobby.setStatus(LobbyStatus.FULL);
 
-                // Spiel kann starten - beide Spieler benachrichtigen
-                startGame(lobby);
+                // Sende LOBBY_UPDATE an den zweiten Spieler, damit er subscriben kann
+                messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-update",
+                    Map.of(
+                        "type", "LOBBY_UPDATE",
+                        "lobbyId", lobbyId,
+                        "players", lobby.getPlayers(),
+                        "status", "FULL",
+                        "message", "Quick Match gefunden. Du bist der zweite Spieler."
+                    ));
+
+                // Automatischer Spielstart, wenn zwei Spieler in der Lobby sind
+                if (lobby.getPlayers().size() == 2 && gameRestController != null) {
+                    StartGameRequest startReq = new StartGameRequest();
+                    startReq.setLobbyId(lobby.getLobbyId());
+                    startReq.setGameTime(lobby.getGameTime().name());
+                    startReq.setRandomPlayers(true); // Quick-Match: Farben zufällig
+                    // Spieler werden im GameRestController zufällig zugewiesen
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(400); // 400ms Delay für Client-Subscription
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        gameRestController.startGame(startReq);
+                    }).start();
+                }
                 return lobbyId;
             } else {
                 // Fallback: Erstelle neue Lobby

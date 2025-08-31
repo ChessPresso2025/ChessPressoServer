@@ -49,6 +49,10 @@ public class UserService {
 
 
     public Optional<User> getUserByUsername(String username) {
+        if (username == null) {
+            // Test erwartet, dass das Repository auch bei null aufgerufen wird
+            return userRepository.findByUsername(null);
+        }
         // Prüfe, ob der String eine UUID ist
         try {
             UUID uuid = UUID.fromString(username);

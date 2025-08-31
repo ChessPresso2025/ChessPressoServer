@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 
-@Controller
+@RestController
 public class GameRestController {
 
     private final GameManager gameManager;

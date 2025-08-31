@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 public class ConnectionStatusBroadcaster {
@@ -18,13 +20,23 @@ public class ConnectionStatusBroadcaster {
         this.onlinePlayerService = onlinePlayerService;
     }
 
-    @Scheduled(fixedRate = 5000)
+    @Scheduled(fixedRate = 5000) // Alle 5 Sekunden
     public void broadcastConnectionStatus() {
-        Set<String> players = onlinePlayerService.getOnlinePlayers();
-        for (String playerId : players) {
-            simpMessagingTemplate.convertAndSendToUser(
-                    playerId, "/queue/status", Map.of("type", "connection-status", "status", "online")
+        broadcastPlayerUpdate();
+    }
+
+    // Neue Methode für sofortige Updates bei Connect/Disconnect
+    public void broadcastPlayerUpdate() {
+
+        try {
+            Map<String, Object> publicMessage = Map.of(
+                    "type", "status-update",
+                    "status", "online"
             );
+            simpMessagingTemplate.convertAndSend("/topic/players", publicMessage);
+        } catch (Exception e) {
+            System.out.println("Failed to send public message: " + e.getMessage());
         }
+        System.out.println("Broadcasted players status to players: " + onlinePlayerService.getOnlinePlayers());
     }
 }

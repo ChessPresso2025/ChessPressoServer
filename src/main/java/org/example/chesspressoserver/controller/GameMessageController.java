@@ -58,7 +58,7 @@ public class GameMessageController {
         if (gameController == null) return;
         PieceType promotedPiece = moveRequest.getPromotedPiece();
 
-        //check pawn promotion before applyMove()
+        // Check pawn promotion before applyMove()
         ChessPiece moving = gameController.getBoard().getPiece(start.getY(), start.getX());
         boolean isPromotion = checkPromotion(end, moving);
         if(isPromotion && (promotedPiece == null || promotedPiece == PieceType.NULL)) {
@@ -67,24 +67,34 @@ public class GameMessageController {
             return;
         }
 
+        // Führe den Zug aus
         Move move = gameController.applyMove(start, end, promotedPiece);
         Board board = gameController.getBoard();
         Map<String, PieceInfo> boardMap = getCurrentBoard(gameController);
 
+        // Prüfe auf Schach und Schachmatt
         Position checkedKingPosition = null;
-        TeamColor opposingTeam = gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
-        Position kingPos = board.getKingPosition(gameController.getAktiveTeam());
-
         List<String> checkMatePositions = new ArrayList<>();
-        if (kingPos != null && gameController.isSquareAttackedBy(opposingTeam, kingPos)) {
-            checkedKingPosition = kingPos;
-            // Wenn der König im Schach steht, prüfe auf Schachmatt
-            if (gameController.isCheckMate(kingPos, gameController.getAktiveTeam())) {
-                // Hole die angreifenden Positionen für die Response
-                List<Position> attackers = gameController.getAttackingPositions(kingPos, opposingTeam);
-                checkMatePositions = attackers.stream()
-                    .map(Position::getPos)
-                    .collect(Collectors.toList());
+
+        // Hole den aktiven König (der, der gerade am Zug ist)
+        Position kingPos = board.getKingPosition(gameController.getAktiveTeam());
+        TeamColor opposingTeam = gameController.getAktiveTeam() == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
+
+        if (kingPos != null) {
+            // Prüfe ob der König im Schach steht
+            if (gameController.isSquareAttackedBy(opposingTeam, kingPos)) {
+                checkedKingPosition = kingPos;
+
+                // Wenn der König im Schach steht, prüfe auf Schachmatt
+                if (gameController.isCheckMate(kingPos, gameController.getAktiveTeam())) {
+                    // Hole die angreifenden Positionen für die Response
+                    List<Position> attackers = gameController.getAttackingPositions(kingPos, opposingTeam);
+                    if (attackers != null) {
+                        checkMatePositions = attackers.stream()
+                            .map(Position::getPos)
+                            .collect(Collectors.toList());
+                    }
+                }
             }
         }
 

@@ -1,6 +1,7 @@
 package org.example.chesspressoserver.models;
 
 import jakarta.persistence.*;
+import lombok.Getter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -89,4 +90,6 @@ public class User {
             return new User(username, email, passwordHash);
         }
     }
+
+    public UUID getUserId() { return id; }
 }

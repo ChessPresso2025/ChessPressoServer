@@ -1,23 +1,24 @@
 package org.example.chesspressoserver.controller;
 
 import lombok.Data;
-import org.example.chesspressoserver.dto.GameStartResponse;
-import org.example.chesspressoserver.dto.PieceInfo;
+import org.example.chesspressoserver.dto.*;
 import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.gamelogic.modles.Board;
-import org.example.chesspressoserver.models.EndType;
+import org.example.chesspressoserver.models.*;
 import org.example.chesspressoserver.models.gamemodels.ChessPiece;
 import org.example.chesspressoserver.models.gamemodels.PieceType;
 import org.example.chesspressoserver.models.gamemodels.Position;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;
 import org.example.chesspressoserver.models.requests.RematchRequest;
+import org.example.chesspressoserver.models.requests.ResignGameRequest;
 import org.example.chesspressoserver.models.requests.StartGameRequest;
 import org.example.chesspressoserver.service.LobbyService;
-import org.example.chesspressoserver.models.Lobby;
-import org.example.chesspressoserver.models.GameTime;
-import org.example.chesspressoserver.models.LobbyStatus;
+import org.example.chesspressoserver.service.GameHistoryService;
+import org.example.chesspressoserver.service.StatsService;
 import org.example.chesspressoserver.service.UserService;
+import org.example.chesspressoserver.repository.GameRepository;
+import java.time.OffsetDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -27,29 +28,31 @@ import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-@Controller
+@RestController
 public class GameRestController {
 
     private final GameManager gameManager;
     private final SimpMessagingTemplate messagingTemplate;
     private final LobbyService lobbyService;
     private final UserService userService;
+    private final GameHistoryService gameHistoryService;
+    private final GameRepository gameRepository;
+    private final StatsService statsService;
 
     @Autowired
-    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService) {
+    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService, GameHistoryService gameHistoryService, GameRepository gameRepository, StatsService statsService) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
         this.lobbyService = lobbyService;
         this.userService = userService;
+        this.gameHistoryService = gameHistoryService;
+        this.gameRepository = gameRepository;
+        this.statsService = statsService;
     }
 
     @MessageMapping("/game/start")
-    @SendTo("/topic/game/start/response")
     public GameStartResponse startGame(StartGameRequest request) {
         System.out.println("Received start request: " + request);
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
@@ -87,34 +90,57 @@ public class GameRestController {
         lobby.setGameStarted(true);
         lobby.setStatus(LobbyStatus.IN_GAME);
 
-        String whitePlayerName = userService.getUsernameById(whitePlayer);
-        String blackPlayerName = userService.getUsernameById(blackPlayer);
+        // Hole die User-Objekte anhand des Usernamens (falls nötig)
+        Optional<User> whiteUserOpt = userService.getUserByUsername(whitePlayer);
+        Optional<User> blackUserOpt = userService.getUserByUsername(blackPlayer);
+        if (whiteUserOpt.isEmpty() || blackUserOpt.isEmpty()) {
+            String missing = whiteUserOpt.isEmpty() ? "WhitePlayer ('" + whitePlayer + "')" : "BlackPlayer ('" + blackPlayer + "')";
+            System.out.println("Spieler nicht in der Datenbank gefunden: " + missing);
+            return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(),
+                    whiteUserOpt.isPresent() ? whiteUserOpt.get().getUsername() : null,
+                    blackUserOpt.isPresent() ? blackUserOpt.get().getUsername() : null,
+                    "/topic/lobby/" + request.getLobbyId(), null,
+                    missing + " konnte nicht gefunden werden");
+        }
+        UUID whitePlayerId = whiteUserOpt.get().getId();
+        UUID blackPlayerId = blackUserOpt.get().getId();
+        String whitePlayerName = whiteUserOpt.get().getUsername();
+        String blackPlayerName = blackUserOpt.get().getUsername();
 
-        gameManager.startGame(request.getLobbyId());
+        // GameEntity erzeugen und speichern
+        GameEntity gameEntity = new GameEntity();
+        gameEntity.setWhitePlayerId(whitePlayerId);
+        gameEntity.setBlackPlayerId(blackPlayerId);
+        gameEntity.setStartedAt(OffsetDateTime.now());
+        gameEntity.setLobbyId(request.getLobbyId());
+        gameRepository.save(gameEntity);
+        // GameManager mit gameId starten
+        gameManager.startGame(request.getLobbyId(), gameEntity.getId());
         // WebSocket-Benachrichtigung an alle Clients der Lobby
         messagingTemplate.convertAndSend(
-            "/topic/lobby/" + request.getLobbyId(),
-            Map.of(
-                "type", "gameStarted",
-                "success", true,
-                "lobbyId", request.getLobbyId() ,
-                "gameTime", request.getGameTime(),
-                "whitePlayer", whitePlayerName ,
-                "blackPlayer", blackPlayerName ,
-                "randomPlayers", request.isRandomPlayers(),
-                "board", getBoardForLobby(request.getLobbyId())
-            )
+                // Setze die LobbyId
+                "/topic/lobby/" + request.getLobbyId(),
+                Map.of(
+                        "type", "gameStarted",
+                        "success", true,
+                        "lobbyId", request.getLobbyId(),
+                        "gameTime", request.getGameTime(),
+                        "whitePlayer", whitePlayerName,
+                        "blackPlayer", blackPlayerName,
+                        "randomPlayers", request.isRandomPlayers(),
+                        "board", getBoardForLobby(request.getLobbyId())
+                )
         );
         // GameStartResponse zurückgeben
         return new GameStartResponse(
-            true,
-            request.getLobbyId(),
-            request.getGameTime(),
-            whitePlayerName,
-            blackPlayerName,
-            "/topic/lobby/" + request.getLobbyId(),
-            getBoardForLobby(request.getLobbyId()),
-            null
+                true,
+                request.getLobbyId(),
+                request.getGameTime(),
+                whitePlayerName,
+                blackPlayerName,
+                "/topic/lobby/" + request.getLobbyId(),
+                getBoardForLobby(request.getLobbyId()),
+                null
         );
     }
 
@@ -122,11 +148,11 @@ public class GameRestController {
         GameController gameController = gameManager.getGameByLobby(lobbyId);
         Map<String, PieceInfo> boardMap = new HashMap<>();
         if (gameController == null) return boardMap;
-       Board board = gameController.getBoard();
+        Board board = gameController.getBoard();
         for (int x = 0; x < 8; x++) {
             for (int y = 0; y < 8; y++) {
                 Position pos = new Position(x, y);
-                ChessPiece piece = board.getPiece(y,x);
+                ChessPiece piece = board.getPiece(y, x);
                 if (piece != null) {
                     boardMap.put(pos.toString(), new PieceInfo(piece.getType(), piece.getColour()));
                 } else {
@@ -135,6 +161,19 @@ public class GameRestController {
             }
         }
         return boardMap;
+    }
+
+    @PostMapping("/resign")
+    public ResponseEntity<?> resignGame(@RequestBody ResignGameRequest request) {
+        if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
+            return ResponseEntity.badRequest().body("Lobby-ID fehlt");
+        }
+        boolean success = gameManager.resignGame(request.getLobbyId());
+        if (success) {
+            return ResponseEntity.ok().body("Spiel für Lobby aufgegeben");
+        } else {
+            return ResponseEntity.badRequest().body("Ungültige Lobby-ID");
+        }
     }
 
     @PostMapping("/rematch")
@@ -161,35 +200,87 @@ public class GameRestController {
         }
         EndType endType = message.endType;
 
-        switch(endType) {
-            case RESIGNATION: onResign(message, lobby); break;
-            case AGREED_DRAW: onDraw(message, lobby); break;
-            case TIMEOUT: onTimeout(message, lobby); break;
+        switch (endType) {
+            case RESIGNATION:
+                onResign(message, lobby);
+                break;
+            case AGREED_DRAW:
+                onDraw(message, lobby);
+                break;
+            case TIMEOUT:
+                onTimeout(message, lobby);
+                break;
+        }
+    }
+
+    private void updateGameEndInDatabase(String lobbyId, String result) {
+        Optional<GameEntity> gameOpt = gameRepository.findByLobbyId(lobbyId);
+        if (gameOpt.isPresent()) {
+            GameEntity game = gameOpt.get();
+            game.setEndedAt(java.time.OffsetDateTime.now());
+            game.setResult(result);
+            gameRepository.save(game);
         }
     }
 
     private void onTimeout(GameEndMessage message, Lobby lobby) {
-        //TODO
+        updateGameEndInDatabase(message.getLobbyId(), "TIMEOUT");
+        //TODO: weitere Logik für Timeout
     }
 
     private void onDraw(GameEndMessage message, Lobby lobby) {
-        //TODO
+        updateGameEndInDatabase(message.getLobbyId(), "DRAW");
+        //TODO: weitere Logik für Remis
     }
 
     private void onResign(GameEndMessage message, Lobby lobby) {
         boolean success = gameManager.resignGame(message.getLobbyId());
-        String loser; String winner;
-        if(message.getPlayer() == TeamColor.WHITE){
+        String loser;
+        String winner;
+        String result;
+        Optional<User> whiteUserOpt = userService.getUserByUsername(lobby.getWhitePlayer());
+        Optional<User> blackUserOpt = userService.getUserByUsername(lobby.getBlackPlayer());
+        UUID whiteId = whiteUserOpt.map(User::getId).orElse(null);
+        UUID blackId = blackUserOpt.map(User::getId).orElse(null);
+        if (message.getPlayer() == TeamColor.WHITE) {
             loser = lobby.getWhitePlayer();
             winner = lobby.getBlackPlayer();
-        }else{
-            loser =  lobby.getBlackPlayer();
+            result = "BLACK_WIN";
+            // Statistik aktualisieren
+            if (whiteId != null) {
+                StatsReportRequest whiteLoss = new StatsReportRequest();
+                whiteLoss.setResult("LOSS");
+                statsService.reportGameResult(whiteId, whiteLoss);
+            }
+            if (blackId != null) {
+                StatsReportRequest blackWin = new StatsReportRequest();
+                blackWin.setResult("WIN");
+                statsService.reportGameResult(blackId, blackWin);
+            }
+        } else {
+            loser = lobby.getBlackPlayer();
             winner = lobby.getWhitePlayer();
+            result = "WHITE_WIN";
+            // Statistik aktualisieren
+            if (whiteId != null) {
+                StatsReportRequest whiteWin = new StatsReportRequest();
+                whiteWin.setResult("WIN");
+                statsService.reportGameResult(whiteId, whiteWin);
+            }
+            if (blackId != null) {
+                StatsReportRequest blackLoss = new StatsReportRequest();
+                blackLoss.setResult("LOSS");
+                statsService.reportGameResult(blackId, blackLoss);
+            }
         }
+        updateGameEndInDatabase(message.getLobbyId(), result);
+        // Spiel aus GameManager entfernen
+        gameManager.removeGameByLobbyId(message.getLobbyId());
         if (success) {
             // Benachrichtige alle Clients in der Lobby, dass das Spiel aufgegeben wurde
             messagingTemplate.convertAndSend(
-                    "/topic/lobby/" + message.getLobbyId(), new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId())
+                    "/topic/lobby/" + message.getLobbyId(),
+                    new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId())
             );
         } else {
             // Optional: Fehlernachricht senden
@@ -206,6 +297,7 @@ public class GameRestController {
         }
     }
 
+
     @Data
     public static class GameEndMessage {
         private String lobbyId;
@@ -214,13 +306,14 @@ public class GameRestController {
     }
 
     @Data
-    public static class GameEndResponse{
+    public static class GameEndResponse {
         private String winner;
         private String loser;
         private boolean draw;
         private String lobbyId;
         private final String type = "game-end";
-        public GameEndResponse(String winner, String loser,  boolean draw, String lobbyId) {
+
+        public GameEndResponse(String winner, String loser, boolean draw, String lobbyId) {
             this.winner = winner;
             this.loser = loser;
             this.draw = draw;

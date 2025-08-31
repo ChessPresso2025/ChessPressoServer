@@ -49,7 +49,19 @@ public class UserService {
 
 
     public Optional<User> getUserByUsername(String username) {
-        return userRepository.findByUsername(username);
+        if (username == null) {
+            // Test erwartet, dass das Repository auch bei null aufgerufen wird
+            return userRepository.findByUsername(null);
+        }
+        // Prüfe, ob der String eine UUID ist
+        try {
+            UUID uuid = UUID.fromString(username);
+            // Suche nach ID, falls es eine UUID ist
+            return userRepository.findById(uuid);
+        } catch (IllegalArgumentException e) {
+            // Kein UUID-Format, suche nach Username
+            return userRepository.findByUsername(username);
+        }
     }
 
 

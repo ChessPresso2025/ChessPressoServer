@@ -5,6 +5,10 @@ import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.gamelogic.modles.Board;
 import org.example.chesspressoserver.models.gamemodels.*;
+import org.example.chesspressoserver.repository.MoveRepository;
+import org.example.chesspressoserver.repository.GameRepository;
+import org.example.chesspressoserver.models.MoveEntity;
+import org.example.chesspressoserver.models.GameEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
@@ -15,16 +19,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.OffsetDateTime;
 
 @Controller
 public class GameMessageController {
     @Getter
     private final GameManager gameManager;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MoveRepository moveRepository;
+    private final GameRepository gameRepository;
 
-    public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate) {
+    public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, MoveRepository moveRepository, GameRepository gameRepository) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
+        this.moveRepository = moveRepository;
+        this.gameRepository = gameRepository;
     }
 
     @MessageMapping("/game/position-request")
@@ -89,16 +98,32 @@ public class GameMessageController {
             }
         }
 
-        // Erstelle die Response
         String isCheck = checkedKingPosition != null ? checkedKingPosition.getPos() : "";
         SendMove sendMove = new SendMove(move);
 
-        // Sende die Response
         messagingTemplate.convertAndSend(
             "/topic/game/" + moveRequest.lobbyId + "/move",
             new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(),
                 moveRequest.lobbyId, sendMove, checkMatePositions)
         );
+
+        // Nach applyMove: Zug in DB speichern
+        java.util.UUID gameId = gameController.getGameId();
+        GameEntity gameEntity = gameRepository.findById(gameId).orElse(null);
+        if (gameEntity != null) {
+            MoveEntity moveEntity = new MoveEntity();
+            moveEntity.setGame(gameEntity);
+            // moveNumber: Anzahl bisheriger Züge + 1
+            int moveNumber = moveRepository.findByGameIdOrderByMoveNumberAsc(gameId).size() + 1;
+            moveEntity.setMoveNumber(moveNumber);
+            // ASCII-Symbol für die Figur bestimmen
+            String pieceAscii = getAsciiForPiece(moving.getType(), moving.getColour());
+            moveEntity.setMoveNotation(
+                pieceAscii + ": " + move.getStart().getPos().toLowerCase() + " -> " + move.getEnd().getPos().toLowerCase()
+            );
+            moveEntity.setCreatedAt(OffsetDateTime.now());
+            moveRepository.save(moveEntity);
+        }
     }
 
     public Map<String, PieceInfo> getCurrentBoard(GameController gameController) {
@@ -127,6 +152,113 @@ public class GameMessageController {
             }
         }
         return isPromotion;
+    }
+
+    private List<Position> getAttackingPositions(GameController gameController, Position kingPos, TeamColor attackingTeam) {
+        List<Position> attackingPositions = new ArrayList<>();
+        Board board = gameController.getBoard();
+
+        for(int x = 0; x < 8; x++) {
+            for(int y = 0; y < 8; y++) {
+                Position pos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y, x);
+                if(piece != null && piece.getColour() == attackingTeam) {
+                    List<String> possibleMoves = gameController.getMovesForRequestAsString(pos);
+                    if(possibleMoves.contains(kingPos.getPos())) {
+                        attackingPositions.add(pos);
+                    }
+                }
+            }
+        }
+        return attackingPositions;
+    }
+
+    private boolean isCheckMate(GameController gameController, Position kingPos, TeamColor defendingTeam) {
+        // 1. Prüfe ob der König sich bewegen kann
+        List<String> kingMoves = gameController.getMovesForRequestAsString(kingPos);
+        if(!kingMoves.isEmpty()) {
+            return false;
+        }
+
+        // 2. Hole alle angreifenden Positionen
+        TeamColor attackingTeam = defendingTeam == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
+        List<Position> attackers = getAttackingPositions(gameController, kingPos, attackingTeam);
+
+        // Wenn mehr als ein Angreifer und der König sich nicht bewegen kann, ist es Schachmatt
+        if(attackers.size() > 1) {
+            return true;
+        }
+
+        // 3. Bei einem Angreifer: Prüfe ob eine verteidigende Figur den Angreifer schlagen oder blocken kann
+        Position attacker = attackers.get(0);
+        Board board = gameController.getBoard();
+
+        // Prüfe alle verteidigenden Figuren
+        for(int x = 0; x < 8; x++) {
+            for(int y = 0; y < 8; y++) {
+                Position defenderPos = new Position(x, y);
+                ChessPiece piece = board.getPiece(y, x);
+                if(piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
+                    List<String> moves = gameController.getMovesForRequestAsString(defenderPos);
+
+                    // Kann der Angreifer geschlagen werden?
+                    if(moves.contains(attacker.getPos())) {
+                        return false;
+                    }
+
+                    // Kann eine Figur zwischen König und Angreifer ziehen?
+                    for(String move : moves) {
+                        Position blockingPos = new Position(move);
+                        if(isPositionBetween(blockingPos, kingPos, attacker)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private boolean isPositionBetween(Position pos, Position start, Position end) {
+        // Vereinfachte Implementierung für gerade Linien (horizontal, vertikal, diagonal)
+        int dx = Integer.compare(end.getX() - start.getX(), 0);
+        int dy = Integer.compare(end.getY() - start.getY(), 0);
+
+        Position current = new Position(start.getX() + dx, start.getY() + dy);
+        while(!current.equals(end)) {
+            if(current.equals(pos)) {
+                return true;
+            }
+            current = new Position(current.getX() + dx, current.getY() + dy);
+        }
+        return false;
+    }
+
+    // Hilfsmethode für ASCII-Symbole
+    private String getAsciiForPiece(PieceType type, TeamColor color) {
+        if (color == TeamColor.WHITE) {
+            return switch (type) {
+                case PAWN -> "♙";
+                case KNIGHT -> "♘";
+                case BISHOP -> "♗";
+                case ROOK -> "♖";
+                case QUEEN -> "♕";
+                case KING -> "♔";
+                default -> " ";
+            };
+        } else if (color == TeamColor.BLACK) {
+            return switch (type) {
+                case PAWN -> "♟";
+                case KNIGHT -> "♞";
+                case BISHOP -> "♝";
+                case ROOK -> "♜";
+                case QUEEN -> "♛";
+                case KING -> "♚";
+                default -> " ";
+            };
+        }
+        return " ";
     }
 
     @Getter

@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GameManager {
     private final Map<String, GameController> games = new ConcurrentHashMap<>();
 
-    public void startGame(String lobbyId) {
-        games.put(lobbyId, new GameController());
+    public void startGame(String lobbyId, java.util.UUID gameId) {
+        games.put(lobbyId, new GameController(gameId));
     }
 
     public GameController getGameByLobby(String lobbyId) {
@@ -30,5 +30,9 @@ public class GameManager {
             return true;
         }
         return false;
+    }
+
+    public void removeGameByLobbyId(String lobbyId) {
+        games.remove(lobbyId);
     }
 }

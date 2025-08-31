@@ -106,7 +106,11 @@ public class GameMessageController {
             // moveNumber: Anzahl bisheriger Züge + 1
             int moveNumber = moveRepository.findByGameIdOrderByMoveNumberAsc(gameId).size() + 1;
             moveEntity.setMoveNumber(moveNumber);
-            moveEntity.setMoveNotation(move.toString());
+            // ASCII-Symbol für die Figur bestimmen
+            String pieceAscii = getAsciiForPiece(moving.getType(), moving.getColour());
+            moveEntity.setMoveNotation(
+                pieceAscii + ": " + move.getStart().getPos().toLowerCase() + " -> " + move.getEnd().getPos().toLowerCase()
+            );
             moveEntity.setCreatedAt(OffsetDateTime.now());
             moveRepository.save(moveEntity);
         }
@@ -219,6 +223,32 @@ public class GameMessageController {
             current = new Position(current.getX() + dx, current.getY() + dy);
         }
         return false;
+    }
+
+    // Hilfsmethode für ASCII-Symbole
+    private String getAsciiForPiece(PieceType type, TeamColor color) {
+        if (color == TeamColor.WHITE) {
+            return switch (type) {
+                case PAWN -> "♙";
+                case KNIGHT -> "♘";
+                case BISHOP -> "♗";
+                case ROOK -> "♖";
+                case QUEEN -> "♕";
+                case KING -> "♔";
+                default -> " ";
+            };
+        } else if (color == TeamColor.BLACK) {
+            return switch (type) {
+                case PAWN -> "♟";
+                case KNIGHT -> "♞";
+                case BISHOP -> "♝";
+                case ROOK -> "♜";
+                case QUEEN -> "♛";
+                case KING -> "♚";
+                default -> " ";
+            };
+        }
+        return " ";
     }
 
     @Getter

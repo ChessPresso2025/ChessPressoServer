@@ -624,48 +624,54 @@ public class GameController {
 
         // 1. Prüfe ob der König sich bewegen kann
         List<String> kingMoves = getMovesForRequestAsString(kingPos);
-        if(kingMoves != null && !kingMoves.isEmpty()) {
-            return false;
+        if (kingMoves != null && !kingMoves.isEmpty()) {
+            return false; // König kann sich bewegen, kein Matt
         }
 
-        // 2. Nutze die currentAttackers Liste
+        // 2. Prüfe ob der König überhaupt im Schach steht
         if (currentAttackers.isEmpty()) {
-            return false;
+            return false; // König steht nicht im Schach
         }
 
-        // Wenn mehr als ein Angreifer und der König sich nicht bewegen kann, ist es Schachmatt
-        if(currentAttackers.size() > 1) {
+        // 3. Bei Doppelschach und der König kann sich nicht bewegen -> Matt
+        if (currentAttackers.size() > 1) {
             return true;
         }
 
-        // 3. Bei einem Angreifer: Prüfe ob eine verteidigende Figur den Angreifer schlagen oder blocken kann
+        // 4. Bei einfachem Schach: Kann eine andere Figur helfen?
         Position attacker = currentAttackers.get(0);
+        TeamColor enemy = (defendingTeam == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
 
         // Prüfe alle verteidigenden Figuren
-        for(int x = 0; x < 8; x++) {
-            for(int y = 0; y < 8; y++) {
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
                 Position defenderPos = new Position(x, y);
                 ChessPiece piece = board.getPiece(y, x);
-                if(piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
-                    List<String> moves = getMovesForRequestAsString(defenderPos);
-                    if (moves == null) continue;
+
+                // Nur eigene Figuren außer dem König
+                if (piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
+                    // Hole mögliche Züge der Figur
+                    List<Position> moves = getMovesForRequest(defenderPos);
 
                     // Kann der Angreifer geschlagen werden?
-                    if(moves.contains(attacker.getPos())) {
+                    if (moves.contains(attacker)) {
                         return false;
                     }
 
-                    // Kann eine Figur zwischen König und Angreifer ziehen?
-                    for(String move : moves) {
-                        if (move == null) continue;
-                        Position blockingPos = new Position(move);
-                        if(isPositionBetween(blockingPos, kingPos, attacker)) {
-                            return false;
+                    // Kann sich eine Figur dazwischen stellen?
+                    if (hasClearLine(kingPos, attacker)) { // Nur wenn Angreifer und König auf einer Linie
+                        List<Position> blockingSquares = squaresBetweenExclusive(kingPos, attacker);
+                        for (Position blockPos : blockingSquares) {
+                            if (moves.contains(blockPos)) {
+                                return false; // Eine Figur kann blocken
+                            }
                         }
                     }
                 }
             }
         }
+
+        // Wenn weder der König sich bewegen noch eine andere Figur helfen kann -> Matt
         return true;
     }
 

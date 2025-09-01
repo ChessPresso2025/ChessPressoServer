@@ -460,6 +460,23 @@ public class LobbyService {
         return activeLobbies.values();
     }
 
+    /**
+     * Schliesst und entfernt eine Lobby explizit (z.B. nach Spielende).
+     * Benachrichtigt auch alle Abonnenten ueber die Entfernung.
+     */
+    public void closeLobby(String lobbyId) {
+        Lobby removed = activeLobbies.remove(lobbyId);
+        if (removed != null) {
+            // Lobby-Code freigeben
+            lobbyCodeGenerator.removeLobbyCode(lobbyId);
+            // Broadcast ueber Lobby-Entfernung
+            broadcastLobbyRemoved(lobbyId);
+            logger.info("Lobby closed after game end - Lobby: {}", lobbyId);
+        } else {
+            logger.debug("closeLobby called but lobby not found - Lobby: {}", lobbyId);
+        }
+    }
+
     public String getPlayerLobby(String playerId) {
         for (Lobby lobby : activeLobbies.values()) {
             if (lobby.getPlayers().contains(playerId)) {

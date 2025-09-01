@@ -77,33 +77,18 @@ public class GameRestController {
         }
         lobby.setRandomColors(request.isRandomPlayers());
 
-        String whitePlayer = request.getWhitePlayer();
-        String blackPlayer = request.getBlackPlayer();
 
-        if (request.isRandomPlayers()) {
-            List<String> players = lobby.getPlayers();
-            if (players == null || players.size() != 2) {
-                return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(), null, null, "/topic/lobby/" + request.getLobbyId(), null, "Es müssen genau zwei Spieler in der Lobby sein, um die Farben zufällig zuzuweisen.");
-            }
-            List<String> shuffled = new ArrayList<>(players);
-            Collections.shuffle(shuffled);
-            whitePlayer = shuffled.get(0);
-            blackPlayer = shuffled.get(1);
-        }
-        lobby.setWhitePlayer(whitePlayer);
-        lobby.setBlackPlayer(blackPlayer);
-        lobby.setGameStarted(true);
-        lobby.setStatus(LobbyStatus.IN_GAME);
+        lobbyService.startGame(lobby);
 
         // Hole die User-Objekte anhand des Usernamens (falls nötig)
-        Optional<User> whiteUserOpt = userService.getUserByUsername(whitePlayer);
-        Optional<User> blackUserOpt = userService.getUserByUsername(blackPlayer);
+        Optional<User> whiteUserOpt = userService.getUserById(lobby.getWhitePlayer());
+        Optional<User> blackUserOpt = userService.getUserById(lobby.getBlackPlayer());
         if (whiteUserOpt.isEmpty() || blackUserOpt.isEmpty()) {
-            String missing = whiteUserOpt.isEmpty() ? "WhitePlayer ('" + whitePlayer + "')" : "BlackPlayer ('" + blackPlayer + "')";
+            String missing = whiteUserOpt.isEmpty() ? "WhitePlayer ('" + lobby.getWhitePlayer() + "')" : "BlackPlayer ('" + lobby.getBlackPlayer() + "')";
             System.out.println("Spieler nicht in der Datenbank gefunden: " + missing);
             return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(),
-                    whiteUserOpt.isPresent() ? whiteUserOpt.get().getUsername() : null,
-                    blackUserOpt.isPresent() ? blackUserOpt.get().getUsername() : null,
+                    whiteUserOpt.map(User::getUsername).orElse(null),
+                    blackUserOpt.map(User::getUsername).orElse(null),
                     "/topic/lobby/" + request.getLobbyId(), null,
                     missing + " konnte nicht gefunden werden");
         }
@@ -166,19 +151,6 @@ public class GameRestController {
             }
         }
         return boardMap;
-    }
-
-    @PostMapping("/rematch")
-    public ResponseEntity<?> requestRematch(@RequestBody RematchRequest request) {
-        if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
-            return ResponseEntity.badRequest().body("Lobby-ID fehlt");
-        }
-        boolean success = gameManager.rematch(request.getLobbyId());
-        if (success) {
-            return ResponseEntity.ok().body("Rematch gestartet für Lobby-ID: " + request.getLobbyId());
-        } else {
-            return ResponseEntity.badRequest().body("Ungültige Lobby-ID für Rematch");
-        }
     }
 
     @MessageMapping("/game/end")
@@ -340,10 +312,8 @@ public class GameRestController {
         if (lobby == null) {
             return;
         }
-        System.out.println("Remisnachricht erhalten");
         // Remis-Angebot: responder == null
         if (remisMessage.getResponder() == TeamColor.NULL) {
-            System.out.println("Remisangebot erkannt");
             String sender = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getWhitePlayer() : lobby.getBlackPlayer();
             String receiver = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getBlackPlayer() : lobby.getWhitePlayer();
             String receiver_name = userService.getUsernameById(receiver);
@@ -356,7 +326,6 @@ public class GameRestController {
                     "lobbyId", remisMessage.getLobbyId()
                 )
             );
-            System.out.println("Remisnachricht erstellt für Spieler " + receiver_name);
         } else if (remisMessage.isAccept()) {
 
             GameEndMessage endMessage = new GameEndMessage(
@@ -400,7 +369,8 @@ public class GameRestController {
         if (lobby == null) return;
         List<String> players = lobby.getPlayers();
         if (players.size() != 2) return;
-        String fromPlayerId = request.getPlayerId();
+        String fromPlayerName = request.getPlayerId();
+        String fromPlayerId = userService.getUserByUsername(fromPlayerName).get().getId().toString();
         String toPlayerId = players.stream().filter(id -> !id.equals(fromPlayerId)).findFirst().orElse(null);
         if (toPlayerId == null) return;
         System.out.println("[Rematch] Principal: " + (principal != null ? principal.getName() : "null") + ", fromPlayerId: " + fromPlayerId + ", toPlayerId: " + toPlayerId);
@@ -412,7 +382,7 @@ public class GameRestController {
         });
         // Sende RematchOffer an das Lobby-Topic, Empfänger im Payload
         RematchOffer offer = new RematchOffer(
-            lobby.getLobbyId(), fromPlayerId, toPlayerId);
+            lobby.getLobbyId(), fromPlayerId, userService.getUsernameById(toPlayerId));
         messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId() + "/rematch-offer", offer);
         System.out.println("[Rematch] Sent offer to topic: /topic/lobby/" + lobby.getLobbyId() + "/rematch-offer");
     }
@@ -426,14 +396,32 @@ public class GameRestController {
         String fromPlayerName = response.getPlayerId(); // Username!
         String toPlayerName = players.stream().filter(name -> !name.equals(fromPlayerName)).findFirst().orElse(null);
         if (toPlayerName == null) return;
-        // Sende RematchResult an beide Spieler (per Username)
-        RematchResult result = new RematchResult(
-            lobby.getLobbyId(), response.getResponse());
-        messagingTemplate.convertAndSendToUser(fromPlayerName, "/queue/rematch-result", result);
-        messagingTemplate.convertAndSendToUser(toPlayerName, "/queue/rematch-result", result);
+
         // Wenn akzeptiert, neue Partie starten
         if ("accepted".equalsIgnoreCase(response.getResponse())) {
-            lobbyService.startRematch(lobby);
+            // Sende RematchResult an beide Spieler (per Username)
+            String newLobbyCode = lobbyService.startRematch(lobby);
+            RematchResult result = new RematchResult(lobby.getLobbyId(), response.getResponse(), newLobbyCode);
+            //schicke rematch-antwort mit neuer lobby id
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId() + "/rematch-result", result);
+            lobbyService.closeLobby(lobby.getLobbyId());
+            try {
+                Thread.sleep(500); // 500ms Verzögerung, damit Clients subscriben können
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // Starte das neue Spiel wie bei normalem Start
+            startGame(new StartGameRequest(
+                    newLobbyCode,
+                    lobby.getGameTime().name(),
+                    userService.getUsernameById(lobby.getWhitePlayer()),
+                    userService.getUsernameById(lobby.getBlackPlayer()),
+                    true)
+            );
+            System.out.println("neuer lobby code: " + newLobbyCode);
+        }else{
+            RematchResult result = new RematchResult(lobby.getLobbyId(), response.getResponse(), null);
+            messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId() + "/rematch-result", result);
         }
     }
 }

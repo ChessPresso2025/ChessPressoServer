@@ -268,6 +268,7 @@ public class GameRestController {
                     "/topic/lobby/" + message.getLobbyId(),
                     new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId(), reason)
             );
+            // lobbyService.closeLobby(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
         } else {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
@@ -292,6 +293,8 @@ public class GameRestController {
                 "/topic/lobby/" + message.getLobbyId(),
                 new GameEndResponse(null, null, true, lobby.getLobbyId(), "DRAW")
         );
+        // gameManager.removeGameByLobbyId(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
+        // lobbyService.closeLobby(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
         //TODO: weitere Logik für Remis
     }
 

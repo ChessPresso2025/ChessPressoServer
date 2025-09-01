@@ -174,6 +174,26 @@ public class LobbyWebSocketController {
         }
     }
 
+    /**
+     * Handler für explizites Schließen einer Lobby durch den Client
+     */
+    @MessageMapping("/lobby/close")
+    public void handleLobbyClose(@Payload org.example.chesspressoserver.dto.LobbyCloseMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        String username = extractUsernameOrSendError(message.getPlayerId(), headerAccessor, "Lobby-Schließen");
+        if (username == null) return;
+        var lobby = lobbyService.getLobby(message.getLobbyId());
+        if (lobby == null) {
+            sendErrorToUser(message.getPlayerId(), "Lobby nicht gefunden");
+            return;
+        }
+        // Optional: Nur Creator darf schließen
+        if (!lobby.getCreator().equals(message.getPlayerId())) {
+            sendErrorToUser(message.getPlayerId(), "Nur der Creator darf die Lobby schließen");
+            return;
+        }
+        lobbyService.closeLobby(message.getLobbyId());
+    }
+
     // --- Utility methods to reduce code duplication ---
     /**
      * Extrahiert das Token aus den Session-Attributen und gibt den Username zurück.

@@ -1,21 +1,26 @@
 package org.example.chesspressoserver.models.requests;
 
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
+@Data
 public class RematchResult {
+    @Getter
     private String type = "rematch-result";
+    @Setter
+    @Getter
     private String lobbyId;
+    private final String newlobbyid;
+    @Setter
+    @Getter
     private String result; // "accepted" oder "declined"
 
-    public RematchResult() {}
-
-    public RematchResult(String lobbyId, String result) {
+    public RematchResult(String lobbyId, String result, String newlobbyid) {
         this.lobbyId = lobbyId;
         this.result = result;
+        this.newlobbyid = newlobbyid;
     }
 
-    public String getType() { return type; }
-    public String getLobbyId() { return lobbyId; }
-    public void setLobbyId(String lobbyId) { this.lobbyId = lobbyId; }
-    public String getResult() { return result; }
-    public void setResult(String result) { this.result = result; }
 }
 

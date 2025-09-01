@@ -4,6 +4,7 @@ import lombok.*;
 import org.example.chesspressoserver.gamelogic.GameController;
 import org.example.chesspressoserver.gamelogic.GameManager;
 import org.example.chesspressoserver.gamelogic.modles.Board;
+import org.example.chesspressoserver.models.EndType;
 import org.example.chesspressoserver.models.gamemodels.*;
 import org.example.chesspressoserver.repository.MoveRepository;
 import org.example.chesspressoserver.repository.GameRepository;
@@ -28,12 +29,14 @@ public class GameMessageController {
     private final SimpMessagingTemplate messagingTemplate;
     private final MoveRepository moveRepository;
     private final GameRepository gameRepository;
+    private final GameRestController gameRestController;
 
-    public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, MoveRepository moveRepository, GameRepository gameRepository) {
+    public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, MoveRepository moveRepository, GameRepository gameRepository, GameRestController gameController) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
         this.moveRepository = moveRepository;
         this.gameRepository = gameRepository;
+        this.gameRestController = gameController;
     }
 
     @MessageMapping("/game/position-request")
@@ -126,6 +129,12 @@ public class GameMessageController {
             );
             moveEntity.setCreatedAt(OffsetDateTime.now());
             moveRepository.save(moveEntity);
+        }
+
+        if(!checkMatePositions.isEmpty()) {
+            gameRestController.handleGameEnd(
+                    new GameRestController.GameEndMessage(lobbyId, gameController.getAktiveTeam(), EndType.CHECKMATE)
+            );
         }
     }
 

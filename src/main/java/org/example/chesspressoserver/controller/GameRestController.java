@@ -1,5 +1,6 @@
 package org.example.chesspressoserver.controller;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.example.chesspressoserver.dto.*;
 import org.example.chesspressoserver.gamelogic.GameController;
@@ -10,20 +11,21 @@ import org.example.chesspressoserver.models.gamemodels.ChessPiece;
 import org.example.chesspressoserver.models.gamemodels.PieceType;
 import org.example.chesspressoserver.models.gamemodels.Position;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;
-import org.example.chesspressoserver.models.requests.RematchRequest;
-import org.example.chesspressoserver.models.requests.ResignGameRequest;
-import org.example.chesspressoserver.models.requests.StartGameRequest;
+import org.example.chesspressoserver.models.requests.*;
 import org.example.chesspressoserver.service.LobbyService;
 import org.example.chesspressoserver.service.GameHistoryService;
 import org.example.chesspressoserver.service.StatsService;
 import org.example.chesspressoserver.service.UserService;
 import org.example.chesspressoserver.repository.GameRepository;
+
+import java.security.Principal;
 import java.time.OffsetDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -42,7 +44,7 @@ public class GameRestController {
     private final StatsService statsService;
 
     @Autowired
-    private org.springframework.messaging.simp.user.SimpUserRegistry simpUserRegistry;
+    private SimpUserRegistry simpUserRegistry;
 
     @Autowired
     public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService, GameHistoryService gameHistoryService, GameRepository gameRepository, StatsService statsService) {
@@ -84,7 +86,7 @@ public class GameRestController {
                 return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(), null, null, "/topic/lobby/" + request.getLobbyId(), null, "Es müssen genau zwei Spieler in der Lobby sein, um die Farben zufällig zuzuweisen.");
             }
             List<String> shuffled = new ArrayList<>(players);
-            java.util.Collections.shuffle(shuffled);
+            Collections.shuffle(shuffled);
             whitePlayer = shuffled.get(0);
             blackPlayer = shuffled.get(1);
         }
@@ -166,19 +168,6 @@ public class GameRestController {
         return boardMap;
     }
 
-    @PostMapping("/resign")
-    public ResponseEntity<?> resignGame(@RequestBody ResignGameRequest request) {
-        if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
-            return ResponseEntity.badRequest().body("Lobby-ID fehlt");
-        }
-        boolean success = gameManager.resignGame(request.getLobbyId());
-        if (success) {
-            return ResponseEntity.ok().body("Spiel für Lobby aufgegeben");
-        } else {
-            return ResponseEntity.badRequest().body("Ungültige Lobby-ID");
-        }
-    }
-
     @PostMapping("/rematch")
     public ResponseEntity<?> requestRematch(@RequestBody RematchRequest request) {
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
@@ -213,6 +202,9 @@ public class GameRestController {
             case TIMEOUT:
                 onTimeout(message, lobby);
                 break;
+            case CHECKMATE:
+                onCheckmate(message, lobby);
+                break;
         }
     }
 
@@ -220,72 +212,95 @@ public class GameRestController {
         Optional<GameEntity> gameOpt = gameRepository.findByLobbyId(lobbyId);
         if (gameOpt.isPresent()) {
             GameEntity game = gameOpt.get();
-            game.setEndedAt(java.time.OffsetDateTime.now());
+            game.setEndedAt(OffsetDateTime.now());
             game.setResult(result);
             gameRepository.save(game);
         }
     }
 
     private void handleGameEndCommon(GameEndMessage message, Lobby lobby, EndType endType, boolean callResignGame) {
-        String loser;
-        String winner;
-        Optional<User> whiteUserOpt = userService.getUserByUsername(lobby.getWhitePlayer());
-        Optional<User> blackUserOpt = userService.getUserByUsername(lobby.getBlackPlayer());
+        String loser = null;
+        String winner = null;
+        Optional<User> whiteUserOpt = userService.getUserById(lobby.getWhitePlayer());
+        Optional<User> blackUserOpt = userService.getUserById(lobby.getBlackPlayer());
         UUID whiteId = whiteUserOpt.map(User::getId).orElse(null);
         UUID blackId = blackUserOpt.map(User::getId).orElse(null);
+        System.out.println("weißer spieler: " + (whiteId != null ? whiteId.toString() : null) + "  schwarzer spieler: " + (blackId != null ? blackId.toString() : null) );
         String result;
+        boolean draw = false;
         boolean success = true;
-        if (callResignGame) {
-            success = gameManager.resignGame(message.getLobbyId());
-        }
-        if (message.getPlayer() == TeamColor.WHITE) {
-            loser = lobby.getWhitePlayer();
-            winner = lobby.getBlackPlayer();
-            result = "BLACK_WIN";
+
+        if (endType == EndType.AGREED_DRAW) {
+            result = "DRAW";
+            draw = true;
+            // Stats für beide Spieler als DRAW
             if (whiteId != null) {
-                StatsReportRequest whiteLoss = new StatsReportRequest();
-                whiteLoss.setResult("LOSS");
-                statsService.reportGameResult(whiteId, whiteLoss);
+                StatsReportRequest whiteDraw = new StatsReportRequest();
+                whiteDraw.setResult("DRAW");
+                statsService.reportGameResult(whiteId, whiteDraw);
             }
             if (blackId != null) {
-                StatsReportRequest blackWin = new StatsReportRequest();
-                blackWin.setResult("WIN");
-                statsService.reportGameResult(blackId, blackWin);
+                StatsReportRequest blackDraw = new StatsReportRequest();
+                blackDraw.setResult("DRAW");
+                statsService.reportGameResult(blackId, blackDraw);
             }
         } else {
-            loser = lobby.getBlackPlayer();
-            winner = lobby.getWhitePlayer();
-            result = "WHITE_WIN";
-            if (whiteId != null) {
-                StatsReportRequest whiteWin = new StatsReportRequest();
-                whiteWin.setResult("WIN");
-                statsService.reportGameResult(whiteId, whiteWin);
+            if (callResignGame) {
+                success = gameManager.resignGame(message.getLobbyId());
             }
-            if (blackId != null) {
-                StatsReportRequest blackLoss = new StatsReportRequest();
-                blackLoss.setResult("LOSS");
-                statsService.reportGameResult(blackId, blackLoss);
+            if (message.getPlayer() == TeamColor.WHITE) {
+                loser = lobby.getWhitePlayer();
+                winner = lobby.getBlackPlayer();
+                result = "BLACK_WIN";
+                if (whiteId != null) {
+                    StatsReportRequest whiteLoss = new StatsReportRequest();
+                    whiteLoss.setResult("LOSS");
+                    statsService.reportGameResult(whiteId, whiteLoss);
+                }
+                if (blackId != null) {
+                    StatsReportRequest blackWin = new StatsReportRequest();
+                    blackWin.setResult("WIN");
+                    statsService.reportGameResult(blackId, blackWin);
+                }
+            } else {
+                loser = lobby.getBlackPlayer();
+                winner = lobby.getWhitePlayer();
+                result = "WHITE_WIN";
+                if (whiteId != null) {
+                    StatsReportRequest whiteWin = new StatsReportRequest();
+                    whiteWin.setResult("WIN");
+                    statsService.reportGameResult(whiteId, whiteWin);
+                }
+                if (blackId != null) {
+                    StatsReportRequest blackLoss = new StatsReportRequest();
+                    blackLoss.setResult("LOSS");
+                    statsService.reportGameResult(blackId, blackLoss);
+                }
             }
         }
+
         updateGameEndInDatabase(message.getLobbyId(), result);
         gameManager.removeGameByLobbyId(message.getLobbyId());
-        String reason = null;
-        switch (endType) {
-            case RESIGNATION:
-                reason = "RESIGN";
-                break;
-            case TIMEOUT:
-                reason = "TIMEOUT";
-                break;
-            default:
-                reason = "NORMAL";
-        }
-        if (!callResignGame || success) {
+
+        String reason = switch (endType) {
+            case RESIGNATION -> "RESIGN";
+            case TIMEOUT -> "TIMEOUT";
+            case CHECKMATE -> "CHECKMATE";
+            case AGREED_DRAW -> "DRAW";
+            default -> null;
+        };
+
+        if (endType == EndType.AGREED_DRAW || !callResignGame || success) {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
-                    new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId(), reason)
+                    new GameEndResponse(
+                            draw ? null : userService.getUsernameById(winner),
+                            draw ? null : userService.getUsernameById(loser),
+                            draw,
+                            lobby.getLobbyId(),
+                            reason
+                    )
             );
-            // lobbyService.closeLobby(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
         } else {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
@@ -305,21 +320,55 @@ public class GameRestController {
     }
 
     private void onDraw(GameEndMessage message, Lobby lobby) {
-        updateGameEndInDatabase(message.getLobbyId(), "DRAW");
-        messagingTemplate.convertAndSend(
-                "/topic/lobby/" + message.getLobbyId(),
-                new GameEndResponse(null, null, true, lobby.getLobbyId(), "DRAW")
-        );
-        // gameManager.removeGameByLobbyId(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
-        // lobbyService.closeLobby(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
-        //TODO: weitere Logik für Remis
+        handleGameEndCommon(message, lobby, EndType.AGREED_DRAW, false);
     }
 
     private void onResign(GameEndMessage message, Lobby lobby) {
         handleGameEndCommon(message, lobby, EndType.RESIGNATION, true);
     }
 
+    private void onCheckmate(GameEndMessage message, Lobby lobby) {
+        handleGameEndCommon(message, lobby, EndType.CHECKMATE, false);
+    }
 
+    @MessageMapping("/lobby/{lobbyId}/remis")
+    public void handleRemisMessage(@Payload RemisMessage remisMessage) {
+        if (remisMessage.getLobbyId() == null || remisMessage.getLobbyId().isEmpty() || remisMessage.getRequester() == null) {
+            return;
+        }
+        Lobby lobby = lobbyService.getLobby(remisMessage.getLobbyId());
+        if (lobby == null) {
+            return;
+        }
+        System.out.println("Remisnachricht erhalten");
+        // Remis-Angebot: responder == null
+        if (remisMessage.getResponder() == TeamColor.NULL) {
+            System.out.println("Remisangebot erkannt");
+            String sender = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getWhitePlayer() : lobby.getBlackPlayer();
+            String receiver = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getBlackPlayer() : lobby.getWhitePlayer();
+            String receiver_name = userService.getUsernameById(receiver);
+            messagingTemplate.convertAndSend(
+                "/topic/lobby/remis/" + receiver_name,
+                Map.of(
+                    "type", "remis",
+                    "requester", remisMessage.getRequester(),
+                    "accept", false,
+                    "lobbyId", remisMessage.getLobbyId()
+                )
+            );
+            System.out.println("Remisnachricht erstellt für Spieler " + receiver_name);
+        } else if (remisMessage.isAccept()) {
+
+            GameEndMessage endMessage = new GameEndMessage(
+                remisMessage.getLobbyId(),
+                remisMessage.getResponder(), // Der Spieler, der das Remis bestätigt
+                EndType.AGREED_DRAW
+            );
+            handleGameEnd(endMessage);
+        }
+    }
+
+    @AllArgsConstructor
     @Data
     public static class GameEndMessage {
         private String lobbyId;
@@ -346,7 +395,7 @@ public class GameRestController {
     }
 
     @MessageMapping("/lobby/rematch/request")
-    public void handleRematchRequest(@Payload RematchRequest request, java.security.Principal principal) {
+    public void handleRematchRequest(@Payload RematchRequest request, Principal principal) {
         Lobby lobby = lobbyService.getLobby(request.getLobbyId());
         if (lobby == null) return;
         List<String> players = lobby.getPlayers();
@@ -362,14 +411,14 @@ public class GameRestController {
             user.getSessions().forEach(session -> System.out.println("    SessionId: " + session.getId()));
         });
         // Sende RematchOffer an das Lobby-Topic, Empfänger im Payload
-        org.example.chesspressoserver.models.requests.RematchOffer offer = new org.example.chesspressoserver.models.requests.RematchOffer(
+        RematchOffer offer = new RematchOffer(
             lobby.getLobbyId(), fromPlayerId, toPlayerId);
         messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId() + "/rematch-offer", offer);
         System.out.println("[Rematch] Sent offer to topic: /topic/lobby/" + lobby.getLobbyId() + "/rematch-offer");
     }
 
     @MessageMapping("/lobby/rematch/response")
-    public void handleRematchResponse(@Payload org.example.chesspressoserver.models.requests.RematchResponse response) {
+    public void handleRematchResponse(@Payload RematchResponse response) {
         Lobby lobby = lobbyService.getLobby(response.getLobbyId());
         if (lobby == null) return;
         List<String> players = lobby.getPlayers();
@@ -378,7 +427,7 @@ public class GameRestController {
         String toPlayerName = players.stream().filter(name -> !name.equals(fromPlayerName)).findFirst().orElse(null);
         if (toPlayerName == null) return;
         // Sende RematchResult an beide Spieler (per Username)
-        org.example.chesspressoserver.models.requests.RematchResult result = new org.example.chesspressoserver.models.requests.RematchResult(
+        RematchResult result = new RematchResult(
             lobby.getLobbyId(), response.getResponse());
         messagingTemplate.convertAndSendToUser(fromPlayerName, "/queue/rematch-result", result);
         messagingTemplate.convertAndSendToUser(toPlayerName, "/queue/rematch-result", result);

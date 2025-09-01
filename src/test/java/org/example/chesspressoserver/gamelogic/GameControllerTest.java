@@ -166,4 +166,5 @@ class GameControllerTest {
         assertFalse(controller.getCastlingRights().isWhiteKingSide());
         assertFalse(controller.getCastlingRights().isWhiteQueenSide());
     }
+
 }

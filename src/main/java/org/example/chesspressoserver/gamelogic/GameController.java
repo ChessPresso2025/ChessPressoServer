@@ -14,7 +14,6 @@ import java.util.UUID;
 @Service
 @Getter
 public class GameController {
-
     private UUID gameId;
 
     @Setter
@@ -34,6 +33,8 @@ public class GameController {
 
     @Setter
     private int movesSinceCapture = 0;   // Zähler für Züge ohne Schlagen
+
+    private List<Position> currentAttackers = new ArrayList<>(); // Liste der aktuellen Angreifer
 
     // Konstruktor
     public GameController() {
@@ -85,34 +86,41 @@ public class GameController {
 
             // Wenn der König im Schach steht
             Position myKing = board.getKingPosition(me);
-            if (myKing != null && isSquareAttackedBy(enemy, myKing)) {
-                List<Position> attackers = getAttackingPositions(myKing, enemy);
-
+            if (!currentAttackers.isEmpty()) {
                 // Bei Doppelschach kann nur der König ziehen
-                if (attackers.size() > 1) {
+                if (currentAttackers.size() > 1) {
                     moves.clear();
                     return moves;
                 }
 
-                // Bei einzelnem Schach: Angreifer schlagen oder blockieren
-                Position attacker = attackers.get(0);
+                // Bei einzelnem Schach:
+                Position attacker = currentAttackers.get(0);
 
-                // Prüfe ob die Figur den Angreifer schlagen oder blockieren kann
-                List<Position> validMoves = new ArrayList<>();
-                for (Position move : moves) {
-                    if (move.equals(attacker) || isPositionBetween(move, myKing, attacker)) {
-                        validMoves.add(move);
-                    }
+                // 1. Erlaubte Züge sind das Schlagen des Angreifers
+                // 2. Oder Züge die zwischen König und Angreifer liegen (falls möglich)
+                List<Position> validSquares = new ArrayList<>();
+                validSquares.add(attacker); // Angreifer schlagen ist immer erlaubt
+
+                // Prüfe ob es eine direkte Linie zwischen König und Angreifer gibt
+                if (hasClearLine(myKing, attacker)) {
+                    validSquares.addAll(squaresBetweenExclusive(myKing, attacker));
                 }
-                moves = validMoves;
+
+                // Behalte nur Züge, die entweder den Angreifer schlagen oder blockieren
+                moves.removeIf(move -> !validSquares.contains(move));
             }
 
-            // Pin-/Block-Schnittmenge bei geometrischer Verbindung zum eigenen König
-            if (checkKingConnection(startPos)) {
-                List<Position> corridor = getKingConnectionPostion(startPos);
-                if (!corridor.isEmpty()) {
-                    moves.removeIf(move -> !corridor.contains(move));
-                }
+            // Pin-Prüfung: Wenn die Figur zwischen eigenem König und einem Angreifer steht
+            Position attackerBehindPiece = checkStateAktiveTeam(startPos, piece);
+            if (attackerBehindPiece != null) {
+                // Die Figur ist gepinnt - sie darf sich nur auf der Linie zwischen König und Angreifer bewegen
+                List<Position> corridor = new ArrayList<>();
+                corridor.add(attackerBehindPiece); // Angreifer schlagen ist erlaubt
+                corridor.addAll(squaresBetweenExclusive(startPos, attackerBehindPiece)); // Zwischen Figur und Angreifer
+                corridor.addAll(squaresBetweenExclusive(myKing, startPos)); // Zwischen König und Figur
+
+                // Behalte nur Züge im Korridor
+                moves.removeIf(move -> !corridor.contains(move));
             }
         }
 
@@ -243,6 +251,9 @@ public class GameController {
 
         // 8) Zugfarbe wechseln
         aktiveTeam = (aktiveTeam == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
+
+        // 9) Aktualisiere die Liste der Angreifer für das neue aktive Team
+        updateAttackers();
 
         return result;
     }
@@ -566,31 +577,43 @@ public class GameController {
         }
     }
 
+    // Nach jedem Zug die Liste der Angreifer aktualisieren
+    public void updateAttackers() {
+        currentAttackers.clear();
+        Position kingPos = board.getKingPosition(aktiveTeam);
+
+        if (kingPos != null) {
+            TeamColor enemy = (aktiveTeam == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
+
+            // Durchsuche alle Felder nach gegnerischen Figuren
+            for(int y = 0; y < 8; y++) {
+                for(int x = 0; x < 8; x++) {
+                    ChessPiece piece = board.getPiece(y, x);
+
+                    // Wenn eine gegnerische Figur gefunden wurde
+                    if(piece != null && piece.getColour() == enemy) {
+                        // Prüfe die möglichen Züge dieser Figur
+                        Position piecePos = new Position(x, y);
+                        List<Position> moves = piece.getMove().getPossibleMoves(piecePos, board);
+
+                        // Wenn die Figur den König in ihren möglichen Zügen hat
+                        if(moves != null && moves.contains(kingPos)) {
+                            currentAttackers.add(piecePos);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // =====================================================================
     //Methoden für Schachmattprüfung
     // =====================================================================
 
     // Gibt alle Positionen zurück, von denen aus der König angegriffen wird.
     public List<Position> getAttackingPositions(Position kingPos, TeamColor attackingTeam) {
-        if (kingPos == null || attackingTeam == null) {
-            return new ArrayList<>();
-        }
-
-        List<Position> attackingPositions = new ArrayList<>();
-
-        for(int x = 0; x < 8; x++) {
-            for(int y = 0; y < 8; y++) {
-                Position pos = new Position(x, y);
-                ChessPiece piece = board.getPiece(y, x);
-                if(piece != null && piece.getColour() == attackingTeam) {
-                    List<String> possibleMoves = getMovesForRequestAsString(pos);
-                    if(possibleMoves != null && possibleMoves.contains(kingPos.getPos())) {
-                        attackingPositions.add(pos);
-                    }
-                }
-            }
-        }
-        return attackingPositions;
+        // Da wir jetzt die currentAttackers Liste haben, können wir diese direkt zurückgeben
+        return new ArrayList<>(currentAttackers);
     }
 
     // Prüft, ob der König im Schachmatt ist
@@ -601,52 +624,54 @@ public class GameController {
 
         // 1. Prüfe ob der König sich bewegen kann
         List<String> kingMoves = getMovesForRequestAsString(kingPos);
-        if(kingMoves != null && !kingMoves.isEmpty()) {
-            return false;
+        if (kingMoves != null && !kingMoves.isEmpty()) {
+            return false; // König kann sich bewegen, kein Matt
         }
 
-        // 2. Hole alle angreifenden Positionen
-        TeamColor attackingTeam = defendingTeam == TeamColor.WHITE ? TeamColor.BLACK : TeamColor.WHITE;
-        List<Position> attackers = getAttackingPositions(kingPos, attackingTeam);
-
-        if (attackers == null || attackers.isEmpty()) {
-            return false;
+        // 2. Prüfe ob der König überhaupt im Schach steht
+        if (currentAttackers.isEmpty()) {
+            return false; // König steht nicht im Schach
         }
 
-        // Wenn mehr als ein Angreifer und der König sich nicht bewegen kann, ist es Schachmatt
-        if(attackers.size() > 1) {
+        // 3. Bei Doppelschach und der König kann sich nicht bewegen -> Matt
+        if (currentAttackers.size() > 1) {
             return true;
         }
 
-        // 3. Bei einem Angreifer: Prüfe ob eine verteidigende Figur den Angreifer schlagen oder blocken kann
-        Position attacker = attackers.get(0);
+        // 4. Bei einfachem Schach: Kann eine andere Figur helfen?
+        Position attacker = currentAttackers.get(0);
+        TeamColor enemy = (defendingTeam == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
 
         // Prüfe alle verteidigenden Figuren
-        for(int x = 0; x < 8; x++) {
-            for(int y = 0; y < 8; y++) {
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
                 Position defenderPos = new Position(x, y);
                 ChessPiece piece = board.getPiece(y, x);
-                if(piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
-                    List<String> moves = getMovesForRequestAsString(defenderPos);
-                    if (moves == null) continue;
+
+                // Nur eigene Figuren außer dem König
+                if (piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
+                    // Hole mögliche Züge der Figur
+                    List<Position> moves = getMovesForRequest(defenderPos);
 
                     // Kann der Angreifer geschlagen werden?
-                    if(moves.contains(attacker.getPos())) {
+                    if (moves.contains(attacker)) {
                         return false;
                     }
 
-                    // Kann eine Figur zwischen König und Angreifer ziehen?
-                    for(String move : moves) {
-                        if (move == null) continue;
-                        Position blockingPos = new Position(move);
-                        if(isPositionBetween(blockingPos, kingPos, attacker)) {
-                            return false;
+                    // Kann sich eine Figur dazwischen stellen?
+                    if (hasClearLine(kingPos, attacker)) { // Nur wenn Angreifer und König auf einer Linie
+                        List<Position> blockingSquares = squaresBetweenExclusive(kingPos, attacker);
+                        for (Position blockPos : blockingSquares) {
+                            if (moves.contains(blockPos)) {
+                                return false; // Eine Figur kann blocken
+                            }
                         }
                     }
                 }
             }
         }
 
+        // Wenn weder der König sich bewegen noch eine andere Figur helfen kann -> Matt
         return true;
     }
 
@@ -670,6 +695,31 @@ public class GameController {
     // Pattsituation
     // =====================================================================
 
+    //Gibt zurück, ob eine Patt-Situation vorliegt
+    public boolean isStalemate(TeamColor team) {
+        // Ein Patt liegt vor, wenn der König nicht im Schach steht und das aktive Team keine legalen Züge mehr hat
+        Position kingPos = board.getKingPosition(team);
+        if (kingPos == null) return false;
+
+        // Prüfe ob der König im Schach steht
+        TeamColor enemy = (team == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
+        if (isSquareAttackedBy(enemy, kingPos)) {
+            return false; // König steht im Schach, also kein Patt
+        }
+
+        if (noMovesLeft(team)) {
+            return true; // Kein legaler Zug mehr, also Patt
+        }
+        if (isFiftyMoveRule()){
+            return true; // 50-Züge-Regel greift, also Patt
+        }
+        if (noCheckPossible()){
+            return true; // Kein Schachmatt mehr möglich, also Patt
+        }
+        return false; // Sonst kein Patt
+    }
+
+
     // Prüft, ob das aktive Team keine legalen Züge mehr hat (Patt-Situation)
     public boolean noMovesLeft(TeamColor team) {
         for(int x = 0; x < 8; x++) {
@@ -687,15 +737,131 @@ public class GameController {
         return true;
     }
 
+    // Prüft ob die 50-Züge-Regel greift (50 Züge ohne Bauernzug und ohne Schlagen)
+    public boolean isFiftyMoveRule() {
+        return movesSincePawnMove >= 50 && movesSinceCapture >= 50;
+    }
+
     // Prüft, ob Schach noch möglich ist
-    public boolean noCheckPossible(){
-        //TODO implementieren
+    public boolean noCheckPossible() {
+        // Zähle die Figuren für jedes Team
+        int[] whitePieces = countPieces(TeamColor.WHITE);
+        int[] blackPieces = countPieces(TeamColor.BLACK);
+
+        // Prüfe verschiedene "nicht-schachmatt-mögliche" Konstellationen:
+
+        // 1. Nur Könige
+        if (isOnlyKing(whitePieces) && isOnlyKing(blackPieces)) {
+            return true;
+        }
+
+        // 2. König + einzelner Springer vs. König
+        if ((isOnlyKingAndOneKnight(whitePieces) && isOnlyKing(blackPieces)) ||
+            (isOnlyKing(whitePieces) && isOnlyKingAndOneKnight(blackPieces))) {
+            return true;
+        }
+
+        // 3. König + zwei Springer vs. König
+        if ((isOnlyKingAndTwoKnights(whitePieces) && isOnlyKing(blackPieces)) ||
+            (isOnlyKing(whitePieces) && isOnlyKingAndTwoKnights(blackPieces))) {
+            return true;
+        }
+
+        // 4. König + einzelner Läufer vs. König
+        if ((isOnlyKingAndOneBishop(whitePieces) && isOnlyKing(blackPieces)) ||
+            (isOnlyKing(whitePieces) && isOnlyKingAndOneBishop(blackPieces))) {
+            return true;
+        }
+
+        // 5. König + Läufer vs. König + Läufer (gleiche Farbe)
+        if (isOnlyKingAndOneBishop(whitePieces) && isOnlyKingAndOneBishop(blackPieces)) {
+            // Prüfe ob die Läufer auf gleicher Feldfarbe sind
+            Position whiteBishop = findBishop(TeamColor.WHITE);
+            Position blackBishop = findBishop(TeamColor.BLACK);
+
+            if (whiteBishop != null && blackBishop != null) {
+                // Läufer auf gleicher Feldfarbe wenn Summe der Koordinaten gleiche Parität hat
+                boolean whiteSquareSum = (whiteBishop.getX() + whiteBishop.getY()) % 2 == 0;
+                boolean blackSquareSum = (blackBishop.getX() + blackBishop.getY()) % 2 == 0;
+                if (whiteSquareSum == blackSquareSum) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
-    //Drei Zug Regel
-    //TODO implementieren
+    // Hilfsmethoden für noCheckPossible:
 
-    //50-Züge-Regel
-    //TODO implementieren
+    // Zählt die Anzahl jeder Figurenart für ein Team
+    private int[] countPieces(TeamColor color) {
+        // Index entspricht PieceType.ordinal(): PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING
+        int[] pieces = new int[6];
+
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                ChessPiece piece = board.getPiece(y, x);
+                if (piece != null && piece.getColour() == color) {
+                    pieces[piece.getType().ordinal()]++;
+                }
+            }
+        }
+        return pieces;
+    }
+
+    // Prüft ob ein Team nur einen König hat
+    private boolean isOnlyKing(int[] pieces) {
+        return pieces[PieceType.KING.ordinal()] == 1 &&
+               pieces[PieceType.PAWN.ordinal()] == 0 &&
+               pieces[PieceType.KNIGHT.ordinal()] == 0 &&
+               pieces[PieceType.BISHOP.ordinal()] == 0 &&
+               pieces[PieceType.ROOK.ordinal()] == 0 &&
+               pieces[PieceType.QUEEN.ordinal()] == 0;
+    }
+
+    // Prüft ob ein Team nur König + einen Springer hat
+    private boolean isOnlyKingAndOneKnight(int[] pieces) {
+        return pieces[PieceType.KING.ordinal()] == 1 &&
+               pieces[PieceType.KNIGHT.ordinal()] == 1 &&
+               pieces[PieceType.PAWN.ordinal()] == 0 &&
+               pieces[PieceType.BISHOP.ordinal()] == 0 &&
+               pieces[PieceType.ROOK.ordinal()] == 0 &&
+               pieces[PieceType.QUEEN.ordinal()] == 0;
+    }
+
+    // Prüft ob ein Team nur König + zwei Springer hat
+    private boolean isOnlyKingAndTwoKnights(int[] pieces) {
+        return pieces[PieceType.KING.ordinal()] == 1 &&
+               pieces[PieceType.KNIGHT.ordinal()] == 2 &&
+               pieces[PieceType.PAWN.ordinal()] == 0 &&
+               pieces[PieceType.BISHOP.ordinal()] == 0 &&
+               pieces[PieceType.ROOK.ordinal()] == 0 &&
+               pieces[PieceType.QUEEN.ordinal()] == 0;
+    }
+
+    // Prüft ob ein Team nur König + einen Läufer hat
+    private boolean isOnlyKingAndOneBishop(int[] pieces) {
+        return pieces[PieceType.KING.ordinal()] == 1 &&
+               pieces[PieceType.BISHOP.ordinal()] == 1 &&
+               pieces[PieceType.PAWN.ordinal()] == 0 &&
+               pieces[PieceType.KNIGHT.ordinal()] == 0 &&
+               pieces[PieceType.ROOK.ordinal()] == 0 &&
+               pieces[PieceType.QUEEN.ordinal()] == 0;
+    }
+
+    // Findet die Position des Läufers einer Farbe
+    private Position findBishop(TeamColor color) {
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                ChessPiece piece = board.getPiece(y, x);
+                if (piece != null &&
+                    piece.getColour() == color &&
+                    piece.getType() == PieceType.BISHOP) {
+                    return new Position(x, y);
+                }
+            }
+        }
+        return null;
+    }
 }

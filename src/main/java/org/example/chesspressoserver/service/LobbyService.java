@@ -580,4 +580,26 @@ public class LobbyService {
         // Broadcast an den spezifischen Lobby-Topic
         messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, message);
     }
+
+    /**
+     * Startet ein Rematch in der bestehenden Lobby.
+     * Setzt Status zurück, weist ggf. Farben neu zu und startet das Spiel.
+     */
+    public void startRematch(Lobby lobby) {
+        // Setze Lobby-Status zurück
+        lobby.setGameStarted(false);
+        lobby.setStatus(LobbyStatus.FULL);
+        // Optional: Spieler-Bereitschaft zurücksetzen, falls vorhanden
+        if (lobby.getPlayers() != null) {
+            for (String playerId : lobby.getPlayers()) {
+                lobby.setPlayerReady(playerId, false);
+            }
+        }
+        // Farben zufällig zuweisen, falls gewünscht
+        if (lobby.isRandomColors()) {
+            assignColors(lobby);
+        }
+        // Starte das Spiel wie bei normalem Start
+        startGame(lobby);
+    }
 }

@@ -9,8 +9,7 @@ import org.example.chesspressoserver.models.gamemodels.TeamColor;
 @AllArgsConstructor
 public class RemisMessage {
     private String lobbyId;
-    private TeamColor requester;
-    @Nullable
-    private TeamColor responder; // null bei Anfrage, gesetzt bei Annahme
+    private TeamColor requester; // TeamColor
+    private TeamColor responder; // TeamColor, null bei Angebot
     private boolean accept;
 }

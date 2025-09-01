@@ -218,60 +218,87 @@ public class GameRestController {
     }
 
     private void handleGameEndCommon(GameEndMessage message, Lobby lobby, EndType endType, boolean callResignGame) {
-        String loser;
-        String winner;
+        String loser = null;
+        String winner = null;
         Optional<User> whiteUserOpt = userService.getUserByUsername(lobby.getWhitePlayer());
         Optional<User> blackUserOpt = userService.getUserByUsername(lobby.getBlackPlayer());
         UUID whiteId = whiteUserOpt.map(User::getId).orElse(null);
         UUID blackId = blackUserOpt.map(User::getId).orElse(null);
         String result;
+        boolean draw = false;
         boolean success = true;
-        if (callResignGame) {
-            success = gameManager.resignGame(message.getLobbyId());
-        }
-        if (message.getPlayer() == TeamColor.WHITE) {
-            loser = lobby.getWhitePlayer();
-            winner = lobby.getBlackPlayer();
-            result = "BLACK_WIN";
+
+        if (endType == EndType.AGREED_DRAW) {
+            result = "DRAW";
+            draw = true;
+            // Stats für beide Spieler als DRAW
             if (whiteId != null) {
-                StatsReportRequest whiteLoss = new StatsReportRequest();
-                whiteLoss.setResult("LOSS");
-                statsService.reportGameResult(whiteId, whiteLoss);
+                StatsReportRequest whiteDraw = new StatsReportRequest();
+                whiteDraw.setResult("DRAW");
+                statsService.reportGameResult(whiteId, whiteDraw);
             }
             if (blackId != null) {
-                StatsReportRequest blackWin = new StatsReportRequest();
-                blackWin.setResult("WIN");
-                statsService.reportGameResult(blackId, blackWin);
+                StatsReportRequest blackDraw = new StatsReportRequest();
+                blackDraw.setResult("DRAW");
+                statsService.reportGameResult(blackId, blackDraw);
             }
         } else {
-            loser = lobby.getBlackPlayer();
-            winner = lobby.getWhitePlayer();
-            result = "WHITE_WIN";
-            if (whiteId != null) {
-                StatsReportRequest whiteWin = new StatsReportRequest();
-                whiteWin.setResult("WIN");
-                statsService.reportGameResult(whiteId, whiteWin);
+            if (callResignGame) {
+                success = gameManager.resignGame(message.getLobbyId());
             }
-            if (blackId != null) {
-                StatsReportRequest blackLoss = new StatsReportRequest();
-                blackLoss.setResult("LOSS");
-                statsService.reportGameResult(blackId, blackLoss);
+            if (message.getPlayer() == TeamColor.WHITE) {
+                loser = lobby.getWhitePlayer();
+                winner = lobby.getBlackPlayer();
+                result = "BLACK_WIN";
+                if (whiteId != null) {
+                    StatsReportRequest whiteLoss = new StatsReportRequest();
+                    whiteLoss.setResult("LOSS");
+                    statsService.reportGameResult(whiteId, whiteLoss);
+                }
+                if (blackId != null) {
+                    StatsReportRequest blackWin = new StatsReportRequest();
+                    blackWin.setResult("WIN");
+                    statsService.reportGameResult(blackId, blackWin);
+                }
+            } else {
+                loser = lobby.getBlackPlayer();
+                winner = lobby.getWhitePlayer();
+                result = "WHITE_WIN";
+                if (whiteId != null) {
+                    StatsReportRequest whiteWin = new StatsReportRequest();
+                    whiteWin.setResult("WIN");
+                    statsService.reportGameResult(whiteId, whiteWin);
+                }
+                if (blackId != null) {
+                    StatsReportRequest blackLoss = new StatsReportRequest();
+                    blackLoss.setResult("LOSS");
+                    statsService.reportGameResult(blackId, blackLoss);
+                }
             }
         }
+
         updateGameEndInDatabase(message.getLobbyId(), result);
         gameManager.removeGameByLobbyId(message.getLobbyId());
+
         String reason = switch (endType) {
             case RESIGNATION -> "RESIGN";
             case TIMEOUT -> "TIMEOUT";
             case CHECKMATE -> "CHECKMATE";
+            case AGREED_DRAW -> "DRAW";
             default -> null;
         };
-        if (!callResignGame || success) {
+
+        if (endType == EndType.AGREED_DRAW || !callResignGame || success) {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
-                    new GameEndResponse(userService.getUsernameById(winner), userService.getUsernameById(loser), false, lobby.getLobbyId(), reason)
+                    new GameEndResponse(
+                            draw ? null : userService.getUsernameById(winner),
+                            draw ? null : userService.getUsernameById(loser),
+                            draw,
+                            lobby.getLobbyId(),
+                            reason
+                    )
             );
-            // lobbyService.closeLobby(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
         } else {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
@@ -291,14 +318,7 @@ public class GameRestController {
     }
 
     private void onDraw(GameEndMessage message, Lobby lobby) {
-        updateGameEndInDatabase(message.getLobbyId(), "DRAW");
-        messagingTemplate.convertAndSend(
-                "/topic/lobby/" + message.getLobbyId(),
-                new GameEndResponse(null, null, true, lobby.getLobbyId(), "DRAW")
-        );
-        // gameManager.removeGameByLobbyId(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
-        // lobbyService.closeLobby(message.getLobbyId()); // Entfernt, damit Rematch möglich bleibt
-        //TODO: weitere Logik für Remis
+        handleGameEndCommon(message, lobby, EndType.AGREED_DRAW, false);
     }
 
     private void onResign(GameEndMessage message, Lobby lobby) {

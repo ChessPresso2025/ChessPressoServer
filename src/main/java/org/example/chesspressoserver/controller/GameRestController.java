@@ -315,19 +315,23 @@ public class GameRestController {
         if (lobby == null) {
             return;
         }
+        System.out.println("Remisnachricht erhalten");
         // Remis-Angebot: responder == null
-        if (remisMessage.getResponder() == null) {
+        if (remisMessage.getResponder() == TeamColor.NULL) {
+            System.out.println("Remisangebot erkannt");
             String sender = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getWhitePlayer() : lobby.getBlackPlayer();
             String receiver = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getBlackPlayer() : lobby.getWhitePlayer();
-            messagingTemplate.convertAndSendToUser(
-                receiver,
-                "/queue/remis",
+            String receiver_name = userService.getUsernameById(receiver);
+            messagingTemplate.convertAndSend(
+                "/topic/lobby/remis/" + receiver_name,
                 Map.of(
                     "type", "remis",
-                    "from", sender,
+                    "requester", remisMessage.getRequester(),
+                    "accept", false,
                     "lobbyId", remisMessage.getLobbyId()
                 )
             );
+            System.out.println("Remisnachricht erstellt für Spieler " + receiver_name);
         } else if (remisMessage.isAccept()) {
             // Remis wurde angenommen: Spiel als Remis beenden
             updateGameEndInDatabase(remisMessage.getLobbyId(), "DRAW");

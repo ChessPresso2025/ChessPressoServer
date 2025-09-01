@@ -1,5 +1,6 @@
 package org.example.chesspressoserver.controller;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.example.chesspressoserver.dto.*;
 import org.example.chesspressoserver.gamelogic.GameController;
@@ -163,19 +164,6 @@ public class GameRestController {
         return boardMap;
     }
 
-    @PostMapping("/resign")
-    public ResponseEntity<?> resignGame(@RequestBody ResignGameRequest request) {
-        if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
-            return ResponseEntity.badRequest().body("Lobby-ID fehlt");
-        }
-        boolean success = gameManager.resignGame(request.getLobbyId());
-        if (success) {
-            return ResponseEntity.ok().body("Spiel für Lobby aufgegeben");
-        } else {
-            return ResponseEntity.badRequest().body("Ungültige Lobby-ID");
-        }
-    }
-
     @PostMapping("/rematch")
     public ResponseEntity<?> requestRematch(@RequestBody RematchRequest request) {
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
@@ -209,6 +197,9 @@ public class GameRestController {
                 break;
             case TIMEOUT:
                 onTimeout(message, lobby);
+                break;
+            case CHECKMATE:
+                onCheckmate(message, lobby);
                 break;
         }
     }
@@ -266,17 +257,12 @@ public class GameRestController {
         }
         updateGameEndInDatabase(message.getLobbyId(), result);
         gameManager.removeGameByLobbyId(message.getLobbyId());
-        String reason = null;
-        switch (endType) {
-            case RESIGNATION:
-                reason = "RESIGN";
-                break;
-            case TIMEOUT:
-                reason = "TIMEOUT";
-                break;
-            default:
-                reason = "NORMAL";
-        }
+        String reason = switch (endType) {
+            case RESIGNATION -> "RESIGN";
+            case TIMEOUT -> "TIMEOUT";
+            case CHECKMATE -> "CHECKMATE";
+            default -> null;
+        };
         if (!callResignGame || success) {
             messagingTemplate.convertAndSend(
                     "/topic/lobby/" + message.getLobbyId(),
@@ -313,7 +299,44 @@ public class GameRestController {
         handleGameEndCommon(message, lobby, EndType.RESIGNATION, true);
     }
 
+    private void onCheckmate(GameEndMessage message, Lobby lobby) {
+        handleGameEndCommon(message, lobby, EndType.CHECKMATE, false);
+    }
 
+    @MessageMapping("/lobby/{lobbyId}/remis")
+    public void handleRemisMessage(@Payload RemisMessage remisMessage) {
+        if (remisMessage.getLobbyId() == null || remisMessage.getLobbyId().isEmpty() || remisMessage.getRequester() == null) {
+            return;
+        }
+        Lobby lobby = lobbyService.getLobby(remisMessage.getLobbyId());
+        if (lobby == null) {
+            return;
+        }
+        // Remis-Angebot: responder == null
+        if (remisMessage.getResponder() == null) {
+            String sender = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getWhitePlayer() : lobby.getBlackPlayer();
+            String receiver = remisMessage.getRequester() == TeamColor.WHITE ? lobby.getBlackPlayer() : lobby.getWhitePlayer();
+            messagingTemplate.convertAndSendToUser(
+                receiver,
+                "/queue/remis",
+                Map.of(
+                    "type", "remis",
+                    "from", sender,
+                    "lobbyId", remisMessage.getLobbyId()
+                )
+            );
+        } else if (remisMessage.isAccept()) {
+            // Remis wurde angenommen: Spiel als Remis beenden
+            updateGameEndInDatabase(remisMessage.getLobbyId(), "DRAW");
+            messagingTemplate.convertAndSend(
+                "/topic/lobby/" + remisMessage.getLobbyId(),
+                new GameEndResponse(null, null, true, lobby.getLobbyId(), "DRAW")
+            );
+            gameManager.removeGameByLobbyId(remisMessage.getLobbyId());
+        }
+    }
+
+    @AllArgsConstructor
     @Data
     public static class GameEndMessage {
         private String lobbyId;

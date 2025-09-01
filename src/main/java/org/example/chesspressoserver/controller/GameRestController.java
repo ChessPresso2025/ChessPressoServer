@@ -42,6 +42,9 @@ public class GameRestController {
     private final StatsService statsService;
 
     @Autowired
+    private org.springframework.messaging.simp.user.SimpUserRegistry simpUserRegistry;
+
+    @Autowired
     public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService, GameHistoryService gameHistoryService, GameRepository gameRepository, StatsService statsService) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
@@ -339,6 +342,49 @@ public class GameRestController {
             this.draw = draw;
             this.lobbyId = lobbyId;
             this.reason = reason;
+        }
+    }
+
+    @MessageMapping("/lobby/rematch/request")
+    public void handleRematchRequest(@Payload RematchRequest request, java.security.Principal principal) {
+        Lobby lobby = lobbyService.getLobby(request.getLobbyId());
+        if (lobby == null) return;
+        List<String> players = lobby.getPlayers();
+        if (players.size() != 2) return;
+        String fromPlayerId = request.getPlayerId();
+        String toPlayerId = players.stream().filter(id -> !id.equals(fromPlayerId)).findFirst().orElse(null);
+        if (toPlayerId == null) return;
+        System.out.println("[Rematch] Principal: " + (principal != null ? principal.getName() : "null") + ", fromPlayerId: " + fromPlayerId + ", toPlayerId: " + toPlayerId);
+        // Aktive User-Principals loggen
+        System.out.println("[Rematch] Aktive User im SimpUserRegistry:");
+        simpUserRegistry.getUsers().forEach(user -> {
+            System.out.println("  User: '" + user.getName() + "' Sessions: " + user.getSessions().size());
+            user.getSessions().forEach(session -> System.out.println("    SessionId: " + session.getId()));
+        });
+        // Sende RematchOffer an das Lobby-Topic, Empfänger im Payload
+        org.example.chesspressoserver.models.requests.RematchOffer offer = new org.example.chesspressoserver.models.requests.RematchOffer(
+            lobby.getLobbyId(), fromPlayerId, toPlayerId);
+        messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId() + "/rematch-offer", offer);
+        System.out.println("[Rematch] Sent offer to topic: /topic/lobby/" + lobby.getLobbyId() + "/rematch-offer");
+    }
+
+    @MessageMapping("/lobby/rematch/response")
+    public void handleRematchResponse(@Payload org.example.chesspressoserver.models.requests.RematchResponse response) {
+        Lobby lobby = lobbyService.getLobby(response.getLobbyId());
+        if (lobby == null) return;
+        List<String> players = lobby.getPlayers();
+        if (players.size() != 2) return;
+        String fromPlayerName = response.getPlayerId(); // Username!
+        String toPlayerName = players.stream().filter(name -> !name.equals(fromPlayerName)).findFirst().orElse(null);
+        if (toPlayerName == null) return;
+        // Sende RematchResult an beide Spieler (per Username)
+        org.example.chesspressoserver.models.requests.RematchResult result = new org.example.chesspressoserver.models.requests.RematchResult(
+            lobby.getLobbyId(), response.getResponse());
+        messagingTemplate.convertAndSendToUser(fromPlayerName, "/queue/rematch-result", result);
+        messagingTemplate.convertAndSendToUser(toPlayerName, "/queue/rematch-result", result);
+        // Wenn akzeptiert, neue Partie starten
+        if ("accepted".equalsIgnoreCase(response.getResponse())) {
+            lobbyService.startRematch(lobby);
         }
     }
 }

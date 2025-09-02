@@ -18,7 +18,7 @@ public class UserAuthController {
 
     private final AuthService authService;
 
-    @PostMapping("/register") // Geändert von "/auth/register" zu "/register"
+    @PostMapping("/register")
     public ResponseEntity<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Registration attempt for username: {}", request.getUsername());
         TokenResponse response = authService.register(request);

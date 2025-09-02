@@ -260,43 +260,8 @@ public class LobbyService {
         }
     }
 
-    /**
-     * Neue Methode: Update Player Ready Status für WebSocket-Integration
-     */
-    public boolean updatePlayerReadyStatus(String lobbyId, String playerId, boolean ready) {
-        Lobby lobby = activeLobbies.get(lobbyId);
 
-        if (lobby == null || !lobby.getPlayers().contains(playerId)) {
-            return false;
-        }
 
-        lobby.setPlayerReady(playerId, ready);
-        return true;
-    }
-
-    /**
-     * Neue Methode: Prüfe ob alle Spieler bereit sind
-     */
-    public boolean areAllPlayersReady(String lobbyId) {
-        Lobby lobby = activeLobbies.get(lobbyId);
-
-        if (lobby == null || lobby.getPlayers().size() < 2) {
-            return false;
-        }
-
-        return lobby.areAllPlayersReady();
-    }
-
-    /**
-     * Neue Methode: Starte Spiel wenn alle bereit sind
-     */
-    public void startGameIfReady(String lobbyId) {
-        Lobby lobby = activeLobbies.get(lobbyId);
-
-        if (lobby != null && areAllPlayersReady(lobbyId) && lobby.getPlayers().size() >= 2) {
-            startGame(lobby);
-        }
-    }
 
     /**
      * Erweiterte Methode: WebSocket-Broadcast bei Lobby-Join
@@ -342,26 +307,7 @@ public class LobbyService {
         }
     }
 
-    /**
-     * Erweiterte Methode: WebSocket-Broadcast bei Game-Start
-     */
-    public void broadcastGameStart(String lobbyId) {
-        Lobby lobby = activeLobbies.get(lobbyId);
 
-        if (lobby != null && lobby.isGameStarted()) {
-            Map<String, Object> gameStartMessage = Map.of(
-                "type", "game-start",
-                "lobbyId", lobbyId,
-                "gameTime", lobby.getGameTime() != null ? lobby.getGameTime().toString() : "MIDDLE",
-                "whitePlayer", lobby.getWhitePlayer(),
-                "blackPlayer", lobby.getBlackPlayer(),
-                "lobbyChannel", "game-" + lobbyId
-            );
-
-            // Broadcast an alle Lobby-Teilnehmer
-            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, gameStartMessage);
-        }
-    }
 
     public Lobby getLobby(String lobbyId) {
         return activeLobbies.get(lobbyId);
@@ -444,40 +390,6 @@ public class LobbyService {
         }
     }
 
-    public void removePlayerFromActiveLobby(String playerId) {
-        // Suche nach Lobbys, in denen der Spieler sich befindet
-        activeLobbies.values().stream()
-                .filter(lobby -> lobby.getPlayers().contains(playerId))
-                .findFirst()
-                .ifPresent(lobby -> {
-                    // Wenn der Creator die Lobby verlässt, entferne die gesamte Lobby
-                    if (lobby.getCreator().equals(playerId)) {
-                        String lobbyId = lobby.getLobbyId();
-                        activeLobbies.remove(lobbyId);
-                        // Benachrichtige alle anderen Spieler
-                        lobby.getPlayers().stream()
-                            .filter(player -> !player.equals(playerId))
-                            .forEach(player -> 
-                                messagingTemplate.convertAndSendToUser(
-                                    player,
-                                    "/queue/lobby-updates",
-                                    Map.of("type", "LOBBY_CLOSED", "message", "Creator left the lobby")
-                                )
-                            );
-                    } else {
-                        // Wenn ein anderer Spieler die Lobby verlässt
-                        lobby.removePlayer(playerId);
-                        lobby.setStatus(LobbyStatus.WAITING);
-                        
-                        // Benachrichtige den Creator
-                        messagingTemplate.convertAndSendToUser(
-                            lobby.getCreator(),
-                            "/queue/lobby-updates",
-                            Map.of("type", "PLAYER_LEFT", "message", "Player left the lobby")
-                        );
-                    }
-                });
-    }
 
     /**
      * Broadcast an alle, wenn eine Lobby entfernt wurde

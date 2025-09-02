@@ -1,5 +1,6 @@
 package org.example.chesspressoserver.service;
 
+import lombok.Setter;
 import org.example.chesspressoserver.controller.GameRestController;
 import org.example.chesspressoserver.models.Lobby;
 import org.example.chesspressoserver.models.LobbyStatus;
@@ -28,6 +29,8 @@ public class LobbyService {
     private final Map<GameTime, Queue<String>> quickMatchQueues = new ConcurrentHashMap<>();
     private final UserService userService;
 
+    // Setter für GameRestController (für zirkuläre Abhängigkeit oder nachträgliches Setzen)
+    @Setter
     private GameRestController gameRestController;
 
     public LobbyService(LobbyCodeGenerator lobbyCodeGenerator, SimpMessagingTemplate messagingTemplate, UserService userService) {
@@ -42,11 +45,6 @@ public class LobbyService {
             quickMatchQueues.put(gameTime, new LinkedList<>());
         }
         this.userService = userService;
-    }
-
-    // Setter für GameRestController (für zirkuläre Abhängigkeit oder nachträgliches Setzen)
-    public void setGameRestController(GameRestController gameRestController) {
-        this.gameRestController = gameRestController;
     }
 
 
@@ -122,22 +120,9 @@ public class LobbyService {
 
     public String createPrivateLobby(String creatorId) {
 
-        // Prüfe erst, ob dieser Spieler bereits eine Lobby erstellt hat
-        for (Lobby existingLobby : activeLobbies.values()) {
-            if (existingLobby.getCreator().equals(creatorId) && existingLobby.isPrivate()) {
-                return existingLobby.getLobbyId(); // Gib die bestehende Lobby zurück
-            }
-        }
-
         String lobbyCode = lobbyCodeGenerator.generatePrivateLobbyCode();
         Lobby lobby = new Lobby(lobbyCode, Lobby.LobbyType.PRIVATE, creatorId);
         activeLobbies.put(lobbyCode, lobby);
-
-
-
-        // Benachrichtige Creator
-        messagingTemplate.convertAndSendToUser(creatorId, "/queue/lobby-created",
-            Map.of("lobbyCode", lobbyCode, "message", "Private Lobby erstellt"));
 
         return lobbyCode;
     }
@@ -183,86 +168,16 @@ public class LobbyService {
 
         lobby.addPlayer(playerId);
         lobby.setStatus(LobbyStatus.FULL);
-
-        // Spezifische Benachrichtigungen für beide Spieler
-        String creatorId = lobby.getCreator();
-
-        // Benachrichtige den Creator über den neuen Spieler
-        messagingTemplate.convertAndSendToUser(creatorId, "/queue/player-joined", Map.of(
-            "lobbyId", lobby.getLobbyId(),
-            "newPlayerId", playerId,
-            "players", lobby.getPlayers(),
-            "status", lobby.getStatus().toString(),
-            "message", "Ein Spieler ist deiner Lobby beigetreten!",
-            "isLobbyFull", true
-        ));
-
-        // Benachrichtige den beitretenden Spieler über erfolgreichen Beitritt
-        messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-joined", Map.of(
-            "lobbyId", lobby.getLobbyId(),
-            "creatorId", creatorId,
-            "players", lobby.getPlayers(),
-            "status", lobby.getStatus().toString(),
-            "message", "Erfolgreich der Lobby beigetreten!",
-            "isLobbyFull", true
-        ));
-
         return true;
     }
 
 
-    public boolean configurePrivateLobby(String playerId, String lobbyCode, GameTime gameTime,
-                                       String whitePlayer, String blackPlayer, boolean randomColors) {
-        Lobby lobby = activeLobbies.get(lobbyCode);
-
-        if (lobby == null || !lobby.getCreator().equals(playerId)) {
-            return false;
-        }
-
-        lobby.setGameTime(gameTime);
-        lobby.setWhitePlayer(whitePlayer);
-        lobby.setBlackPlayer(blackPlayer);
-        lobby.setRandomColors(randomColors);
-
-        // Wenn Lobby voll ist und konfiguriert, kann Spiel starten
-        if (lobby.canStart()) {
-            startGame(lobby);
-        } else {
-            notifyLobbyUpdate(lobby, "Lobby konfiguriert");
-        }
-
-        return true;
-    }
-
-
-    private void startGame(Lobby lobby) {
+    public void startGame(Lobby lobby) {
         lobby.setGameStarted(true);
         lobby.setStatus(LobbyStatus.IN_GAME);
 
         // Farben zuweisen
         assignColors(lobby);
-
-        // GAME_START WebSocket Message an beide Spieler
-        for (String playerId : lobby.getPlayers()) {
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/game-start", Map.of(
-                "type", "GAME_START",
-                "lobbyId", lobby.getLobbyId(),
-                "gameTime", lobby.getGameTime().name(),
-                "whitePlayer", lobby.getWhitePlayer(),
-                "blackPlayer", lobby.getBlackPlayer(),
-                "lobbyChannel", "/topic/lobby/" + lobby.getLobbyId()
-            ));
-        }
-
-        // Zusätzlich an Lobby-Channel für andere Subscriber
-        messagingTemplate.convertAndSend("/topic/lobby/" + lobby.getLobbyId(), Map.of(
-            "type", "GAME_START",
-            "lobbyId", lobby.getLobbyId(),
-            "gameTime", lobby.getGameTime().name(),
-            "whitePlayer", lobby.getWhitePlayer(),
-            "blackPlayer", lobby.getBlackPlayer(),
-            "players", lobby.getPlayers()
-        ));
     }
 
 
@@ -460,6 +375,23 @@ public class LobbyService {
         return activeLobbies.values();
     }
 
+    /**
+     * Schliesst und entfernt eine Lobby explizit (z.B. nach Spielende).
+     * Benachrichtigt auch alle Abonnenten ueber die Entfernung.
+     */
+    public void closeLobby(String lobbyId) {
+        Lobby removed = activeLobbies.remove(lobbyId);
+        if (removed != null) {
+            // Lobby-Code freigeben
+            lobbyCodeGenerator.removeLobbyCode(lobbyId);
+            // Broadcast ueber Lobby-Entfernung
+            broadcastLobbyRemoved(lobbyId);
+            logger.info("Lobby closed after game end - Lobby: {}", lobbyId);
+        } else {
+            logger.debug("closeLobby called but lobby not found - Lobby: {}", lobbyId);
+        }
+    }
+
     public String getPlayerLobby(String playerId) {
         for (Lobby lobby : activeLobbies.values()) {
             if (lobby.getPlayers().contains(playerId)) {
@@ -562,5 +494,19 @@ public class LobbyService {
 
         // Broadcast an den spezifischen Lobby-Topic
         messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, message);
+    }
+
+    /**
+     * Startet ein Rematch in der bestehenden Lobby.
+     * Setzt Status zurück, weist ggf. Farben neu zu und startet das Spiel.
+     */
+    public String startRematch(Lobby lobby) {
+
+        //neue private lobby für die beiden Spieler erstellen (gegen Inkonsistenzen in der Datenbank)
+        String newLobbyCode = createPrivateLobby(lobby.getWhitePlayer());
+        joinPrivateLobby(lobby.getBlackPlayer(), newLobbyCode);
+
+        return newLobbyCode;
+
     }
 }

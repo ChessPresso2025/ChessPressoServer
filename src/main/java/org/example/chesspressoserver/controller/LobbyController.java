@@ -25,6 +25,11 @@ public class LobbyController {
     private final UserService userService;
     private final GameStartHandler gameStartHandler;
 
+    private static final String SUCCESS_KEY = "success";
+    private static final String ERROR_KEY = "error";
+    private static final String MESSAGE_KEY = "message";
+    private static final String LOBBY_ID_KEY = "lobbyId";
+
     public LobbyController(LobbyService lobbyService, UserService userService, GameStartHandler gameStartHandler) {
         this.lobbyService = lobbyService;
         this.userService = userService;
@@ -35,7 +40,7 @@ public class LobbyController {
 
 
     @PostMapping("/quick-join")
-    public ResponseEntity<?> quickJoin(@RequestBody QuickJoinRequest request, Principal principal, HttpServletRequest httpRequest) {
+    public ResponseEntity<Map<String, Object>> quickJoin(@RequestBody QuickJoinRequest request, Principal principal, HttpServletRequest httpRequest) {
         // Verwende Session-ID als eindeutige Spieler-ID falls keine vorhanden
         String playerId = principal != null ? principal.getName() :
                          httpRequest.getSession().getId();
@@ -49,10 +54,10 @@ public class LobbyController {
             if (lobby != null && !lobby.isGameStarted()) {
                 // Spieler ist in einer wartenden Lobby - Frontend-konforme Error Response
                 return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", "Du bist bereits in einer Lobby",
-                    "message", "Verlasse zuerst deine aktuelle Lobby",
-                    "lobbyId", existingLobby
+                    SUCCESS_KEY, false,
+                    ERROR_KEY, "Du bist bereits in einer Lobby",
+                    MESSAGE_KEY, "Verlasse zuerst deine aktuelle Lobby",
+                    LOBBY_ID_KEY, existingLobby
                 ));
             } else {
                 // Lobby existiert nicht mehr oder Spiel ist beendet - räume auf
@@ -62,18 +67,17 @@ public class LobbyController {
 
         try {
             String lobbyId = lobbyService.joinQuickMatch(playerId, request.getGameTime());
-            
             return ResponseEntity.ok(Map.of(
-                "success", true,
-                "lobbyId", lobbyId,
-                "message", "Quick Match gestartet",
+                SUCCESS_KEY, true,
+                LOBBY_ID_KEY, lobbyId,
+                MESSAGE_KEY, "Quick Match gestartet",
                 "gameTime", request.getGameTime().name()
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "error", "Fehler beim Quick Match: " + e.getMessage(),
-                "message", "Bitte versuche es erneut"
+                SUCCESS_KEY, false,
+                ERROR_KEY, "Fehler beim Quick Match: " + e.getMessage(),
+                MESSAGE_KEY, "Bitte versuche es erneut"
             ));
         }
     }
@@ -83,7 +87,7 @@ public class LobbyController {
      * Private Lobby erstellen
      */
     @PostMapping("/private/create")
-    public ResponseEntity<?> createPrivateLobby(Principal principal, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> createPrivateLobby(Principal principal, HttpServletRequest request) {
         // Verwende Session-ID als eindeutige Spieler-ID falls kein Principal vorhanden
         String playerId = principal != null ? principal.getName() :
                          request.getSession().getId();
@@ -99,21 +103,21 @@ public class LobbyController {
         try {
             String lobbyCode = lobbyService.createPrivateLobby(playerId);
             return ResponseEntity.ok(Map.of(
-                "success", true,
+                SUCCESS_KEY, true,
                 "lobbyCode", lobbyCode,
-                "message", "Private Lobby erstellt",
+                MESSAGE_KEY, "Private Lobby erstellt",
                 "playerId", playerName  // Für Debug
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
-                "error", "Fehler beim Erstellen der Lobby: " + e.getMessage()
+                ERROR_KEY, "Fehler beim Erstellen der Lobby: " + e.getMessage()
             ));
         }
     }
 
 
     @PostMapping("/private/join")
-    public ResponseEntity<?> joinPrivateLobby(@RequestBody JoinPrivateLobbyRequest request,
+    public ResponseEntity<Map<String, Object>> joinPrivateLobby(@RequestBody JoinPrivateLobbyRequest request,
                                              Principal principal, HttpServletRequest httpRequest) {
         // Verwende Session-ID als eindeutige Spieler-ID falls kein Principal vorhanden
         String playerId = principal != null ? principal.getName() :
@@ -134,21 +138,21 @@ public class LobbyController {
             lobbyService.broadcastLobbyJoined(request.getLobbyCode(), playerName);
             
             return ResponseEntity.ok(Map.of(
-                "success", true,
+                SUCCESS_KEY, true,
                 "lobbyCode", request.getLobbyCode(),
-                "message", "Erfolgreich der Lobby beigetreten",
+                MESSAGE_KEY, "Erfolgreich der Lobby beigetreten",
                 "playerId", playerName  // Für Debug
             ));
         } else {
             return ResponseEntity.badRequest().body(Map.of(
-                "error", "Konnte Lobby nicht beitreten"
+                ERROR_KEY, "Konnte Lobby nicht beitreten"
             ));
         }
     }
 
 
     @PostMapping("/leave")
-    public ResponseEntity<?> leaveLobby(@RequestBody LeaveLobbyRequest request, Principal principal) {
+    public ResponseEntity<Map<String, Object>> leaveLobby(@RequestBody LeaveLobbyRequest request, Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";
 
         // WebSocket-Broadcast vor dem Verlassen
@@ -157,14 +161,14 @@ public class LobbyController {
         lobbyService.leaveLobby(playerId, request.getLobbyId());
 
         return ResponseEntity.ok(Map.of(
-            "success", true,
-            "message", "Lobby verlassen"
+            SUCCESS_KEY, true,
+            MESSAGE_KEY, "Lobby verlassen"
         ));
     }
 
 
     @GetMapping("/{lobbyId}")
-    public ResponseEntity<?> getLobbyInfo(@PathVariable String lobbyId) {
+    public ResponseEntity<Map<String, Object>> getLobbyInfo(@PathVariable String lobbyId) {
         var lobby = lobbyService.getLobby(lobbyId);
 
         if (lobby == null) {
@@ -177,7 +181,7 @@ public class LobbyController {
         }
 
         return ResponseEntity.ok(Map.of(
-            "lobbyId", lobby.getLobbyId(),
+            LOBBY_ID_KEY, lobby.getLobbyId(),
             "lobbyType", lobby.getLobbyType().toString(),
             "players", playerNames,
             "status", lobby.getStatus().toString(),
@@ -190,15 +194,15 @@ public class LobbyController {
 
 
     @PostMapping("/cleanup")
-    public ResponseEntity<?> cleanupPlayer(Principal principal) {
+    public ResponseEntity<Map<String, Object>> cleanupPlayer(Principal principal) {
         String playerId = principal != null ? principal.getName() : "anonymous";
 
         lobbyService.forceLeaveAllLobbies(playerId);
         lobbyService.cleanupStaleLobbies();
 
         return ResponseEntity.ok(Map.of(
-            "success", true,
-            "message", "Spieler aus allen Lobbys entfernt"
+            SUCCESS_KEY, true,
+            MESSAGE_KEY, "Spieler aus allen Lobbys entfernt"
         ));
     }
 

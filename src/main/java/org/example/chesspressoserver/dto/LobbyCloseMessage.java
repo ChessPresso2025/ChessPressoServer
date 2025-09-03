@@ -1,5 +1,10 @@
 package org.example.chesspressoserver.dto;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Setter
+@Getter
 public class LobbyCloseMessage {
     private String lobbyId;
     private String playerId;
@@ -12,28 +17,5 @@ public class LobbyCloseMessage {
         this.playerId = playerId;
     }
 
-    public String getLobbyId() {
-        return lobbyId;
-    }
-
-    public void setLobbyId(String lobbyId) {
-        this.lobbyId = lobbyId;
-    }
-
-    public String getPlayerId() {
-        return playerId;
-    }
-
-    public void setPlayerId(String playerId) {
-        this.playerId = playerId;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
 }
 

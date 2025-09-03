@@ -10,12 +10,17 @@ import org.springframework.stereotype.Controller;
 import java.security.Principal;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Controller
 public class GameWebSocketController {
+    private static final String ANONYMOUS = "anonymous";
+    private static final String PLAYER_ID = "playerId";
 
     private final OnlinePlayerService onlinePlayerService;
     private final SimpMessagingTemplate messagingTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(GameWebSocketController.class);
 
     public GameWebSocketController(OnlinePlayerService onlinePlayerService, SimpMessagingTemplate messagingTemplate) {
         this.onlinePlayerService = onlinePlayerService;
@@ -27,29 +32,29 @@ public class GameWebSocketController {
         String playerId = null;
 
         // Versuche Player-ID aus dem Principal zu holen
-        if (principal != null && !principal.getName().equals("anonymous")) {
+        if (principal != null && !principal.getName().equals(ANONYMOUS)) {
             playerId = principal.getName();
-            System.out.println("Heartbeat from authenticated user: " + playerId);
+            logger.info("Heartbeat from authenticated user: {}", playerId);
         }
 
         // Fallback: Versuche Player-ID aus der Nachricht zu holen
-        if (playerId == null && heartbeatData != null && heartbeatData.containsKey("playerId")) {
-            playerId = (String) heartbeatData.get("playerId");
-            System.out.println("Heartbeat from message payload, playerId: " + playerId);
+        if (playerId == null && heartbeatData != null && heartbeatData.containsKey(PLAYER_ID)) {
+            playerId = (String) heartbeatData.get(PLAYER_ID);
+            logger.info("Heartbeat from message payload, playerId: {}", playerId);
         }
 
-        if (playerId != null && !playerId.equals("anonymous")) {
+        if (playerId != null && !playerId.equals(ANONYMOUS)) {
             onlinePlayerService.updateHeartbeat(playerId);
-            System.out.println("Updated heartbeat for player: " + playerId);
+            logger.info("Updated heartbeat for player: {}", playerId);
         } else {
-            System.out.println("Heartbeat received but no valid playerId found");
+            logger.warn("Heartbeat received but no valid playerId found");
         }
     }
 
     @MessageMapping("/connect")
     @SendTo("/topic/players")
     public String handlePlayerConnect(Principal principal) {
-        String playerId = principal != null ? principal.getName() : "anonymous";
+        String playerId = principal != null ? principal.getName() : ANONYMOUS;
         onlinePlayerService.updateHeartbeat(playerId);
         return "Player " + playerId + " connected";
     }
@@ -57,14 +62,14 @@ public class GameWebSocketController {
     @MessageMapping("/players")
     public void getOnlinePlayers(Principal principal) {
         Set<String> onlinePlayers = onlinePlayerService.getOnlinePlayers();
-        String playerId = principal != null ? principal.getName() : "anonymous";
+        String playerId = principal != null ? principal.getName() : ANONYMOUS;
         messagingTemplate.convertAndSendToUser(playerId, "/queue/players", onlinePlayers);
     }
 
     @MessageMapping("/game/join")
     @SendTo("/topic/game")
     public String handleGameJoin(Principal principal) {
-        String playerId = principal != null ? principal.getName() : "anonymous";
+        String playerId = principal != null ? principal.getName() : ANONYMOUS;
         onlinePlayerService.updateHeartbeat(playerId);
         return "Player " + playerId + " wants to join game";
     }
@@ -75,13 +80,13 @@ public class GameWebSocketController {
         String reason = null;
 
         // Versuche Player-ID aus dem Principal zu holen
-        if (principal != null && !principal.getName().equals("anonymous")) {
+        if (principal != null && !principal.getName().equals(ANONYMOUS)) {
             playerId = principal.getName();
         }
 
         // Fallback: Versuche Player-ID aus der Nachricht zu holen
-        if (playerId == null && closingData != null && closingData.containsKey("playerId")) {
-            playerId = (String) closingData.get("playerId");
+        if (playerId == null && closingData != null && closingData.containsKey(PLAYER_ID)) {
+            playerId = (String) closingData.get(PLAYER_ID);
         }
 
         // Extrahiere Grund für das Schließen
@@ -89,9 +94,9 @@ public class GameWebSocketController {
             reason = (String) closingData.get("reason");
         }
 
-        if (playerId != null && !playerId.equals("anonymous")) {
+        if (playerId != null && !playerId.equals(ANONYMOUS)) {
             onlinePlayerService.removePlayer(playerId);
-            System.out.println("App closing - Player " + playerId + " removed from online list. Reason: " + reason);
+            logger.info("App closing - Player {} removed from online list. Reason: {}", playerId, reason);
 
             // Sofortige Aktualisierung der Online-Spieler-Liste mit Fehlerbehandlung
             try {
@@ -103,12 +108,12 @@ public class GameWebSocketController {
                 );
                 messagingTemplate.convertAndSend("/topic/players", updateMessage);
 
-                System.out.println("Server-Status nach App-Schließung - " + onlinePlayers.size() + " Clients online: " + onlinePlayers);
+                logger.info("Server-Status nach App-Schließung - {} Clients online: {}", onlinePlayers.size(), onlinePlayers);
             } catch (Exception e) {
-                System.out.println("Error sending update after app closing: " + e.getMessage());
+                logger.error("Error sending update after app closing: {}", e.getMessage());
             }
         } else {
-            System.out.println("App closing message received but no valid playerId found");
+            logger.warn("App closing message received but no valid playerId found");
         }
     }
 

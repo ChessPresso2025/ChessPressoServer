@@ -1,7 +1,6 @@
 package org.example.chesspressoserver.service;
 
 import lombok.Setter;
-import org.example.chesspressoserver.controller.GameRestController;
 import org.example.chesspressoserver.models.Lobby;
 import org.example.chesspressoserver.models.LobbyStatus;
 import org.example.chesspressoserver.models.GameTime;
@@ -29,9 +28,19 @@ public class LobbyService {
     private final Map<GameTime, Queue<String>> quickMatchQueues = new ConcurrentHashMap<>();
     private final UserService userService;
 
-    // Setter für GameRestController (für zirkuläre Abhängigkeit oder nachträgliches Setzen)
+    // Setter für GameStartHandler (entkoppelt von GameRestController)
     @Setter
-    private GameRestController gameRestController;
+    private GameStartHandler gameStartHandler;
+
+    // Konstanten für Messaging und Lobby-Attribute
+    private static final String QUEUE_LOBBY_UPDATE = "/queue/lobby-update";
+    private static final String QUEUE_LOBBY_ERROR = "/queue/lobby-error";
+    private static final String TOPIC_LOBBY_PREFIX = "/topic/lobby/";
+    private static final String LOBBY_ID_KEY = "lobbyId";
+    private static final String PLAYERS_KEY = "players";
+    private static final String STATUS_KEY = "status";
+    private static final String MESSAGE_KEY = "message";
+    private static final String LOBBY_ERROR_TYPE = "LOBBY_ERROR";
 
     public LobbyService(LobbyCodeGenerator lobbyCodeGenerator, SimpMessagingTemplate messagingTemplate, UserService userService) {
         this.lobbyCodeGenerator = lobbyCodeGenerator;
@@ -64,13 +73,13 @@ public class LobbyService {
             activeLobbies.put(lobbyId, lobby);
             queue.offer(lobbyId);
 
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-update",
+            messagingTemplate.convertAndSendToUser(playerId, QUEUE_LOBBY_UPDATE,
                 Map.of(
                     "type", "LOBBY_UPDATE",
-                    "lobbyId", lobbyId,
-                    "players", lobby.getPlayers(),
-                    "status", "WAITING",
-                    "message", "Suche nach Gegner..."
+                    LOBBY_ID_KEY, lobbyId,
+                    PLAYERS_KEY, lobby.getPlayers(),
+                    STATUS_KEY, "WAITING",
+                    MESSAGE_KEY, "Suche nach Gegner..."
                 ));
 
             return lobbyId;
@@ -84,29 +93,29 @@ public class LobbyService {
                 lobby.setStatus(LobbyStatus.FULL);
 
                 // Sende LOBBY_UPDATE an den zweiten Spieler, damit er subscriben kann
-                messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-update",
+                messagingTemplate.convertAndSendToUser(playerId, QUEUE_LOBBY_UPDATE,
                     Map.of(
                         "type", "LOBBY_UPDATE",
-                        "lobbyId", lobbyId,
-                        "players", lobby.getPlayers(),
-                        "status", "FULL",
-                        "message", "Quick Match gefunden. Du bist der zweite Spieler."
+                        LOBBY_ID_KEY, lobbyId,
+                        PLAYERS_KEY, lobby.getPlayers(),
+                        STATUS_KEY, "FULL",
+                        MESSAGE_KEY, "Quick Match gefunden. Du bist der zweite Spieler."
                     ));
 
                 // Automatischer Spielstart, wenn zwei Spieler in der Lobby sind
-                if (lobby.getPlayers().size() == 2 && gameRestController != null) {
+                if (lobby.getPlayers().size() == 2 && gameStartHandler != null) {
                     StartGameRequest startReq = new StartGameRequest();
                     startReq.setLobbyId(lobby.getLobbyId());
                     startReq.setGameTime(lobby.getGameTime().name());
                     startReq.setRandomPlayers(true); // Quick-Match: Farben zufällig
-                    // Spieler werden im GameRestController zufällig zugewiesen
+                    // Spieler werden im GameStartHandler zufällig zugewiesen
                     new Thread(() -> {
                         try {
                             Thread.sleep(400); // 400ms Delay für Client-Subscription
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         }
-                        gameRestController.startGame(startReq);
+                        gameStartHandler.startGame(startReq);
                     }).start();
                 }
                 return lobbyId;
@@ -133,30 +142,28 @@ public class LobbyService {
         Lobby lobby = activeLobbies.get(lobbyCode);
 
         if (lobby == null) {
-            System.out.println("DEBUG: Lobby not found for code: " + lobbyCode);
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+            messagingTemplate.convertAndSendToUser(playerId, QUEUE_LOBBY_ERROR,
                 Map.of(
-                    "type", "LOBBY_ERROR",
-                    "error", "Lobby nicht gefunden"
+                    "type", LOBBY_ERROR_TYPE,
+                    MESSAGE_KEY, "Lobby nicht gefunden"
                 ));
             return false;
         }
 
         if (lobby.isFull()) {
-            System.out.println("DEBUG: Lobby is full");
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+            messagingTemplate.convertAndSendToUser(playerId, QUEUE_LOBBY_ERROR,
                 Map.of(
-                    "type", "LOBBY_ERROR",
-                    "error", "Lobby ist bereits voll"
+                    "type", LOBBY_ERROR_TYPE,
+                    MESSAGE_KEY, "Lobby ist bereits voll"
                 ));
             return false;
         }
 
         if (lobby.getStatus() != LobbyStatus.WAITING) {
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
+            messagingTemplate.convertAndSendToUser(playerId, QUEUE_LOBBY_ERROR,
                 Map.of(
-                    "type", "LOBBY_ERROR",
-                    "error", "Lobby ist nicht mehr verfügbar"
+                    "type", LOBBY_ERROR_TYPE,
+                    MESSAGE_KEY, "Lobby ist nicht mehr verfügbar"
                 ));
             return false;
         }
@@ -249,54 +256,19 @@ public class LobbyService {
 
     private void notifyLobbyUpdate(Lobby lobby, String message) {
         Map<String, Object> update = Map.of(
-            "lobbyId", lobby.getLobbyId(),
-            "players", lobby.getPlayers(),
-            "status", lobby.getStatus(),
-            "message", message
+            LOBBY_ID_KEY, lobby.getLobbyId(),
+            PLAYERS_KEY, lobby.getPlayers(),
+            STATUS_KEY, lobby.getStatus(),
+            MESSAGE_KEY, message
         );
 
         for (String playerId : lobby.getPlayers()) {
-            messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-update", update);
+            messagingTemplate.convertAndSendToUser(playerId, QUEUE_LOBBY_UPDATE, update);
         }
     }
 
-    /**
-     * Neue Methode: Update Player Ready Status für WebSocket-Integration
-     */
-    public boolean updatePlayerReadyStatus(String lobbyId, String playerId, boolean ready) {
-        Lobby lobby = activeLobbies.get(lobbyId);
 
-        if (lobby == null || !lobby.getPlayers().contains(playerId)) {
-            return false;
-        }
 
-        lobby.setPlayerReady(playerId, ready);
-        return true;
-    }
-
-    /**
-     * Neue Methode: Prüfe ob alle Spieler bereit sind
-     */
-    public boolean areAllPlayersReady(String lobbyId) {
-        Lobby lobby = activeLobbies.get(lobbyId);
-
-        if (lobby == null || lobby.getPlayers().size() < 2) {
-            return false;
-        }
-
-        return lobby.areAllPlayersReady();
-    }
-
-    /**
-     * Neue Methode: Starte Spiel wenn alle bereit sind
-     */
-    public void startGameIfReady(String lobbyId) {
-        Lobby lobby = activeLobbies.get(lobbyId);
-
-        if (lobby != null && areAllPlayersReady(lobbyId) && lobby.getPlayers().size() >= 2) {
-            startGame(lobby);
-        }
-    }
 
     /**
      * Erweiterte Methode: WebSocket-Broadcast bei Lobby-Join
@@ -309,15 +281,15 @@ public class LobbyService {
         if (lobby != null) {
             Map<String, Object> updateMessage = Map.of(
                 "type", "player-joined",
-                "lobbyId", lobbyId,
+                LOBBY_ID_KEY, lobbyId,
                 "newPlayerId", newPlayerId,
-                "players", lobby.getPlayers(),
-                "status", lobby.getStatus().toString(),
-                "message", "Player " + playerName + " joined the lobby"
+                PLAYERS_KEY, lobby.getPlayers(),
+                STATUS_KEY, lobby.getStatus().toString(),
+                MESSAGE_KEY, "Player " + playerName + " joined the lobby"
             );
 
             // Broadcast an alle Lobby-Teilnehmer
-            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, updateMessage);
+            messagingTemplate.convertAndSend(TOPIC_LOBBY_PREFIX + lobbyId, updateMessage);
         }
     }
 
@@ -330,46 +302,24 @@ public class LobbyService {
         if (lobby != null) {
             Map<String, Object> updateMessage = Map.of(
                 "type", "player-left",
-                "lobbyId", lobbyId,
+                LOBBY_ID_KEY, lobbyId,
                 "playerId", playerId,
-                "players", lobby.getPlayers(),
-                "status", lobby.getStatus().toString(),
-                "message", "Player " + playerId + " left the lobby"
+                PLAYERS_KEY, lobby.getPlayers(),
+                STATUS_KEY, lobby.getStatus().toString(),
+                MESSAGE_KEY, "Player " + playerId + " left the lobby"
             );
 
             // Broadcast an alle verbleibenden Lobby-Teilnehmer
-            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, updateMessage);
+            messagingTemplate.convertAndSend(TOPIC_LOBBY_PREFIX + lobbyId, updateMessage);
         }
     }
 
-    /**
-     * Erweiterte Methode: WebSocket-Broadcast bei Game-Start
-     */
-    public void broadcastGameStart(String lobbyId) {
-        Lobby lobby = activeLobbies.get(lobbyId);
 
-        if (lobby != null && lobby.isGameStarted()) {
-            Map<String, Object> gameStartMessage = Map.of(
-                "type", "game-start",
-                "lobbyId", lobbyId,
-                "gameTime", lobby.getGameTime() != null ? lobby.getGameTime().toString() : "MIDDLE",
-                "whitePlayer", lobby.getWhitePlayer(),
-                "blackPlayer", lobby.getBlackPlayer(),
-                "lobbyChannel", "game-" + lobbyId
-            );
-
-            // Broadcast an alle Lobby-Teilnehmer
-            messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, gameStartMessage);
-        }
-    }
 
     public Lobby getLobby(String lobbyId) {
         return activeLobbies.get(lobbyId);
     }
 
-    public Collection<Lobby> getAllLobbies() {
-        return activeLobbies.values();
-    }
 
     public Collection<Lobby> getAllActiveLobbies() {
         return activeLobbies.values();
@@ -444,40 +394,6 @@ public class LobbyService {
         }
     }
 
-    public void removePlayerFromActiveLobby(String playerId) {
-        // Suche nach Lobbys, in denen der Spieler sich befindet
-        activeLobbies.values().stream()
-                .filter(lobby -> lobby.getPlayers().contains(playerId))
-                .findFirst()
-                .ifPresent(lobby -> {
-                    // Wenn der Creator die Lobby verlässt, entferne die gesamte Lobby
-                    if (lobby.getCreator().equals(playerId)) {
-                        String lobbyId = lobby.getLobbyId();
-                        activeLobbies.remove(lobbyId);
-                        // Benachrichtige alle anderen Spieler
-                        lobby.getPlayers().stream()
-                            .filter(player -> !player.equals(playerId))
-                            .forEach(player -> 
-                                messagingTemplate.convertAndSendToUser(
-                                    player,
-                                    "/queue/lobby-updates",
-                                    Map.of("type", "LOBBY_CLOSED", "message", "Creator left the lobby")
-                                )
-                            );
-                    } else {
-                        // Wenn ein anderer Spieler die Lobby verlässt
-                        lobby.removePlayer(playerId);
-                        lobby.setStatus(LobbyStatus.WAITING);
-                        
-                        // Benachrichtige den Creator
-                        messagingTemplate.convertAndSendToUser(
-                            lobby.getCreator(),
-                            "/queue/lobby-updates",
-                            Map.of("type", "PLAYER_LEFT", "message", "Player left the lobby")
-                        );
-                    }
-                });
-    }
 
     /**
      * Broadcast an alle, wenn eine Lobby entfernt wurde
@@ -485,15 +401,15 @@ public class LobbyService {
     private void broadcastLobbyRemoved(String lobbyId) {
         Map<String, Object> message = Map.of(
             "type", "LOBBY_REMOVED",
-            "lobbyId", lobbyId,
-            "message", "Die Lobby wurde geschlossen"
+            LOBBY_ID_KEY, lobbyId,
+            MESSAGE_KEY, "Die Lobby wurde geschlossen"
         );
 
         // Broadcast an den allgemeinen Lobby-Topic
         messagingTemplate.convertAndSend("/topic/lobbies", message);
 
         // Broadcast an den spezifischen Lobby-Topic
-        messagingTemplate.convertAndSend("/topic/lobby/" + lobbyId, message);
+        messagingTemplate.convertAndSend(TOPIC_LOBBY_PREFIX + lobbyId, message);
     }
 
     /**

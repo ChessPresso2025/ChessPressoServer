@@ -20,7 +20,7 @@ public class UserController {
     private final UserService userService;
 
     @PatchMapping("/username")
-    public ResponseEntity<?> changeUsername(@Valid @RequestBody ChangeUsernameRequest request) {
+    public ResponseEntity<String> changeUsername(@Valid @RequestBody ChangeUsernameRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -35,7 +35,7 @@ public class UserController {
     }
 
     @PatchMapping("/password")
-    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<String> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -59,10 +59,6 @@ public class UserController {
         }
         String userId = authentication.getName();
         var profileOpt = userService.getUserProfile(userId);
-        if (profileOpt.isPresent()) {
-            return ResponseEntity.ok(profileOpt.get());
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Nutzer nicht gefunden");
-        }
+        return profileOpt.<ResponseEntity<Object>>map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Nutzer nicht gefunden"));
     }
 }

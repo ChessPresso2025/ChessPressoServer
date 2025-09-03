@@ -14,6 +14,8 @@ import org.springframework.web.socket.messaging.SessionUnsubscribeEvent;
 import java.security.Principal;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class WebSocketEventListener {
@@ -24,6 +26,10 @@ public class WebSocketEventListener {
 
     // Pattern um Lobby-IDs aus Subscription-Destinations zu extrahieren
     private static final Pattern LOBBY_TOPIC_PATTERN = Pattern.compile("/topic/lobby/([a-zA-Z0-9]+)");
+    private static final String ANONYMOUS = "anonymous";
+    private static final String PLAYER_PREFIX = "Player ";
+
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketEventListener.class);
 
     public WebSocketEventListener(OnlinePlayerService onlinePlayerService,
                                 ConnectionStatusBroadcaster connectionStatusBroadcaster,
@@ -41,17 +47,17 @@ public class WebSocketEventListener {
         Principal user = headerAccessor.getUser();
         String sessionId = headerAccessor.getSessionId();
 
-        System.out.println("WebSocket Connected - Session: " + sessionId + ", User: " + (user != null ? user.getName() : "anonymous"));
+        logger.info("WebSocket Connected - Session: {}, User: {}", sessionId, (user != null ? user.getName() : ANONYMOUS));
 
-        if (user != null && !user.getName().equals("anonymous")) {
+        if (user != null && !user.getName().equals(ANONYMOUS)) {
             String userName = user.getName();
             onlinePlayerService.updateHeartbeat(userName);
-            System.out.println("Player " + userName + " connected via WebSocket");
+            logger.info("{}{} connected via WebSocket", PLAYER_PREFIX, userName);
 
             try {
                 connectionStatusBroadcaster.broadcastPlayerUpdate();
             } catch (Exception e) {
-                System.out.println("Error broadcasting player update on connect: " + e.getMessage());
+                logger.error("Error broadcasting player update on connect: {}", e.getMessage());
             }
         }
     }
@@ -73,7 +79,7 @@ public class WebSocketEventListener {
                 String lobbyId = matcher.group(1);
                 String playerId = user.getName();
 
-                System.out.println("Player " + playerId + " subscribed to lobby " + lobbyId);
+                logger.info("{}{} subscribed to lobby {}", PLAYER_PREFIX, playerId, lobbyId);
 
                 // Registriere die Verbindung in der Lobby-Verwaltung
                 lobbyManager.registerLobbyConnection(lobbyId, playerId);
@@ -82,7 +88,7 @@ public class WebSocketEventListener {
                 try {
                     lobbyManager.sendLobbyStatusUpdate(lobbyId);
                 } catch (Exception e) {
-                    System.out.println("Error sending lobby status update: " + e.getMessage());
+                    logger.error("Error sending lobby status update: {}", e.getMessage());
                 }
             }
         }
@@ -106,7 +112,7 @@ public class WebSocketEventListener {
                 String lobbyId = matcher.group(1);
                 String playerId = user.getName();
 
-                System.out.println("Player " + playerId + " unsubscribed from lobby " + lobbyId);
+                logger.info("{}{} unsubscribed from lobby {}", PLAYER_PREFIX, playerId, lobbyId);
 
                 // Entferne die Verbindung aus der Lobby-Verwaltung
                 lobbyManager.unregisterLobbyConnection(lobbyId, playerId);
@@ -120,11 +126,11 @@ public class WebSocketEventListener {
         Principal user = headerAccessor.getUser();
         String sessionId = headerAccessor.getSessionId();
 
-        System.out.println("WebSocket Disconnected - Session: " + sessionId + ", User: " + (user != null ? user.getName() : "anonymous"));
+        logger.info("WebSocket Disconnected - Session: {}, User: {}", sessionId, (user != null ? user.getName() : ANONYMOUS));
 
-        if (user != null && !user.getName().equals("anonymous")) {
+        if (user != null && !user.getName().equals(ANONYMOUS)) {
             String userName = user.getName();
-            System.out.println("Player " + userName + " disconnected from WebSocket");
+            logger.info("{}{} disconnected from WebSocket", PLAYER_PREFIX, userName);
 
             // Entferne Spieler aus ALLEN Lobbies bei Disconnect
             for (String lobbyId : lobbyManager.getActiveLobbies()) {
@@ -141,7 +147,7 @@ public class WebSocketEventListener {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } catch (Exception e) {
-                    System.out.println("Error removing player on disconnect: " + e.getMessage());
+                    logger.error("Error removing player on disconnect: {}", e.getMessage());
                 }
             }).start();
         }

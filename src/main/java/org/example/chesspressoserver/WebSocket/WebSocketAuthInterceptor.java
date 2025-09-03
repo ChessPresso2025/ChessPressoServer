@@ -11,12 +11,17 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
 @Component
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
+
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketAuthInterceptor.class);
 
     private final JwtService jwtService;
 
@@ -29,46 +34,49 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
         if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-            // Versuche JWT-Token aus verschiedenen Headern zu extrahieren
-            String token = extractToken(accessor);
-
-            System.out.println("WebSocket CONNECT - Token extracted: " + (token != null ? "Yes" : "No"));
-
-            if (token != null) {
-                try {
-                    UUID userId = jwtService.getUserIdFromToken(token);
-                    String username = jwtService.getUsernameFromToken(token);
-
-                    // Erstelle Authentifizierung mit dem tatsächlichen Username
-                    Authentication authentication = new UsernamePasswordAuthenticationToken(
-                        username != null ? username : userId.toString(),
-                        null,
-                        Collections.emptyList()
-                    );
-
-                    accessor.setUser(authentication);
-                    System.out.println("WebSocket authentication successful for user: " + (username != null ? username : userId.toString()));
-
-                } catch (Exception e) {
-                    System.err.println("WebSocket JWT authentication failed: " + e.getMessage());
-                    // Erlaube Verbindung auch ohne gültigen Token (für Tests)
-                }
-            } else {
-                System.out.println("WebSocket connection without JWT token - checking session headers");
-                // Fallback: Schaue nach session-basierten Headern
-                List<String> sessionHeaders = accessor.getNativeHeader("X-User-ID");
-                if (sessionHeaders != null && !sessionHeaders.isEmpty()) {
-                    String userId = sessionHeaders.get(0);
-                    Authentication authentication = new UsernamePasswordAuthenticationToken(
-                        userId, null, Collections.emptyList()
-                    );
-                    accessor.setUser(authentication);
-                    System.out.println("WebSocket authentication via session for user: " + userId);
-                }
-            }
+            handleConnect(accessor);
         }
-
         return message;
+    }
+
+    private void handleConnect(StompHeaderAccessor accessor) {
+        String token = extractToken(accessor);
+        logger.info("WebSocket CONNECT - Token extracted: {}", (token != null ? "Yes" : "No"));
+        if (token != null) {
+            authenticateWithToken(token, accessor);
+        } else {
+            authenticateWithSessionHeader(accessor);
+        }
+    }
+
+    private void authenticateWithToken(String token, StompHeaderAccessor accessor) {
+        try {
+            UUID userId = jwtService.getUserIdFromToken(token);
+            String username = jwtService.getUsernameFromToken(token);
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                username != null ? username : userId.toString(),
+                null,
+                Collections.emptyList()
+            );
+            accessor.setUser(authentication);
+            logger.info("WebSocket authentication successful for user: {}", (username != null ? username : userId.toString()));
+        } catch (Exception e) {
+            logger.error("WebSocket JWT authentication failed: {}", e.getMessage());
+            // Erlaube Verbindung auch ohne gültigen Token (für Tests)
+        }
+    }
+
+    private void authenticateWithSessionHeader(StompHeaderAccessor accessor) {
+        logger.info("WebSocket connection without JWT token - checking session headers");
+        List<String> sessionHeaders = accessor.getNativeHeader("X-User-ID");
+        if (sessionHeaders != null && !sessionHeaders.isEmpty()) {
+            String userId = sessionHeaders.get(0);
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                userId, null, Collections.emptyList()
+            );
+            accessor.setUser(authentication);
+            logger.info("WebSocket authentication via session for user: {}", userId);
+        }
     }
 
     private String extractToken(StompHeaderAccessor accessor) {

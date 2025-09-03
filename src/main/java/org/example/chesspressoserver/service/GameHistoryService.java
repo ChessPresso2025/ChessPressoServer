@@ -5,7 +5,6 @@ import org.example.chesspressoserver.models.MoveEntity;
 import org.example.chesspressoserver.repository.GameRepository;
 import org.example.chesspressoserver.repository.MoveRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;

@@ -1,6 +1,5 @@
 package org.example.chesspressoserver.dto;
 
-import jakarta.annotation.Nullable;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;

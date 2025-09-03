@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service zur Überwachung und Verwaltung von Lobby-WebSocket-Verbindungen
@@ -28,6 +27,9 @@ public class LobbyWebSocketManager {
 
     // Verfolgt welche Lobbies aktiv sind
     private final Set<String> activeLobbies = ConcurrentHashMap.newKeySet();
+
+    private static final String PLAYER_ID = "playerId";
+    private static final String USERNAME = "username";
 
     public LobbyWebSocketManager(SimpMessagingTemplate messagingTemplate,
                                 LobbyService lobbyService,
@@ -52,8 +54,8 @@ public class LobbyWebSocketManager {
         }
         // Informiere alle Spieler in der Lobby über die neue Verbindung
         broadcastToLobby(lobbyId, "PLAYER_CONNECTED", Map.of(
-            "playerId", playerId,
-            "username", username,
+            PLAYER_ID, playerId,
+            USERNAME, username,
             "connectedPlayers", lobbyConnections.get(lobbyId).size()
         ));
     }
@@ -72,8 +74,8 @@ public class LobbyWebSocketManager {
             } else {
                 // Informiere verbleibende Spieler über Disconnection
                 broadcastToLobby(lobbyId, "PLAYER_DISCONNECTED", Map.of(
-                    "playerId", playerId,
-                    "username", userService.getUsernameById(playerId),
+                    PLAYER_ID, playerId,
+                    USERNAME, userService.getUsernameById(playerId),
                     "connectedPlayers", connections.size()
                 ));
             }
@@ -104,8 +106,8 @@ public class LobbyWebSocketManager {
         // Erstelle Spielerliste mit dekodierten Namen
         var playersInfo = lobby.getPlayers().stream()
             .map(playerId -> Map.of(
-                "playerId", playerId,
-                "username", userService.getUsernameById(playerId),
+                PLAYER_ID, playerId,
+                USERNAME, userService.getUsernameById(playerId),
                 "ready", lobby.getPlayerReadyStatus().getOrDefault(playerId, false)
             ))
             .toList();

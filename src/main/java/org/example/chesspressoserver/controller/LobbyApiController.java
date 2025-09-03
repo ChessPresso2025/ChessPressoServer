@@ -6,7 +6,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 import java.security.Principal;
 
 @RestController
@@ -19,11 +18,16 @@ public class LobbyApiController {
         this.lobbyService = lobbyService;
     }
 
+    private static final String LOBBY_ID_KEY = "lobbyId";
+    private static final String SUCCESS_KEY = "success";
+    private static final String TIMESTAMP_KEY = "timestamp";
+    private static final String ERROR_KEY = "error";
+
 
      //Aufruf: http://localhost:8080/api/lobby/all
 
     @GetMapping("/all")
-    public ResponseEntity<?> getAllLobbies() {
+    public ResponseEntity<Map<String, Object>> getAllLobbies() {
         try {
             Collection<Lobby> allLobbies = lobbyService.getAllActiveLobbies();
 
@@ -31,7 +35,7 @@ public class LobbyApiController {
             List<Map<String, Object>> lobbyList = allLobbies.stream()
                 .map(lobby -> {
                     Map<String, Object> lobbyMap = new HashMap<>();
-                    lobbyMap.put("lobbyId", lobby.getLobbyId());
+                    lobbyMap.put(LOBBY_ID_KEY, lobby.getLobbyId());
                     lobbyMap.put("lobbyType", lobby.getLobbyType().toString());
                     lobbyMap.put("status", lobby.getStatus().toString());
                     lobbyMap.put("playerCount", lobby.getPlayers().size());
@@ -42,20 +46,20 @@ public class LobbyApiController {
                     lobbyMap.put("createdAt", lobby.getCreatedAt() != null ? lobby.getCreatedAt().toString() : "Unbekannt");
                     return lobbyMap;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
             Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
+            response.put(SUCCESS_KEY, true);
             response.put("totalLobbies", lobbyList.size());
             response.put("lobbies", lobbyList);
-            response.put("timestamp", java.time.LocalDateTime.now());
+            response.put(TIMESTAMP_KEY, java.time.LocalDateTime.now());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Fehler beim Abrufen der Lobbies: " + e.getMessage());
-            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            errorResponse.put(SUCCESS_KEY, false);
+            errorResponse.put(ERROR_KEY, "Fehler beim Abrufen der Lobbies: " + e.getMessage());
+            errorResponse.put(TIMESTAMP_KEY, java.time.LocalDateTime.now());
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
@@ -64,7 +68,7 @@ public class LobbyApiController {
      //http://localhost:8080/api/lobby/{lobbyId}
 
     @GetMapping("/{lobbyId}")
-    public ResponseEntity<?> getLobbyDetails(@PathVariable String lobbyId) {
+    public ResponseEntity<Map<String, Object>> getLobbyDetails(@PathVariable String lobbyId) {
         try {
             Lobby lobby = lobbyService.getLobby(lobbyId);
 
@@ -74,7 +78,7 @@ public class LobbyApiController {
 
             // Detaillierte Lobby-Informationen für Browser-Anzeige
             Map<String, Object> lobbyDetails = new HashMap<>();
-            lobbyDetails.put("lobbyId", lobby.getLobbyId());
+            lobbyDetails.put(LOBBY_ID_KEY, lobby.getLobbyId());
             lobbyDetails.put("lobbyType", lobby.getLobbyType().toString());
             lobbyDetails.put("status", lobby.getStatus().toString());
             lobbyDetails.put("players", lobby.getPlayers());
@@ -87,24 +91,24 @@ public class LobbyApiController {
             lobbyDetails.put("isFull", lobby.getPlayers().size() >= 2);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
+            response.put(SUCCESS_KEY, true);
             response.put("lobby", lobbyDetails);
-            response.put("timestamp", java.time.LocalDateTime.now());
+            response.put(TIMESTAMP_KEY, java.time.LocalDateTime.now());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Fehler beim Abrufen der Lobby-Details: " + e.getMessage());
-            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            errorResponse.put(SUCCESS_KEY, false);
+            errorResponse.put(ERROR_KEY, "Fehler beim Abrufen der Lobby-Details: " + e.getMessage());
+            errorResponse.put(TIMESTAMP_KEY, java.time.LocalDateTime.now());
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
 
-     //http://localhost:8080/api/lobby/stats
+    //http://localhost:8080/api/lobby/stats
 
     @GetMapping("/stats")
-    public ResponseEntity<?> getLobbyStatistics() {
+    public ResponseEntity<Map<String, Object>> getLobbyStatistics() {
         try {
             Collection<Lobby> allLobbies = lobbyService.getAllActiveLobbies();
 
@@ -125,7 +129,7 @@ public class LobbyApiController {
                 .count();
 
             long gameStartedLobbies = allLobbies.stream()
-                .filter(lobby -> lobby.isGameStarted())
+                .filter(Lobby::isGameStarted)
                 .count();
 
             Map<String, Object> statistics = new HashMap<>();
@@ -137,16 +141,16 @@ public class LobbyApiController {
             statistics.put("activeGames", gameStartedLobbies);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
+            response.put(SUCCESS_KEY, true);
             response.put("statistics", statistics);
-            response.put("timestamp", java.time.LocalDateTime.now());
+            response.put(TIMESTAMP_KEY, java.time.LocalDateTime.now());
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "Fehler beim Abrufen der Statistiken: " + e.getMessage());
-            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            errorResponse.put(SUCCESS_KEY, false);
+            errorResponse.put(ERROR_KEY, "Fehler beim Abrufen der Statistiken: " + e.getMessage());
+            errorResponse.put(TIMESTAMP_KEY, java.time.LocalDateTime.now());
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
@@ -154,28 +158,28 @@ public class LobbyApiController {
     // http://localhost:8080/api/lobby/leave
 
     @PostMapping("/leave")
-    public ResponseEntity<?> leaveLobby(@RequestBody Map<String, String> request, Principal principal) {
+    public ResponseEntity<Map<String, Object>> leaveLobby(@RequestBody Map<String, String> request, Principal principal) {
         try {
-            String lobbyId = request.get("lobbyId");
+            String lobbyId = request.get(LOBBY_ID_KEY);
             String playerId = principal.getName();
 
             if (lobbyId == null) {
                 return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "error", "LobbyId muss angegeben werden"
+                    SUCCESS_KEY, false,
+                    ERROR_KEY, "LobbyId muss angegeben werden"
                 ));
             }
 
             lobbyService.leaveLobby(playerId, lobbyId);
 
             return ResponseEntity.ok(Map.of(
-                "success", true,
+                SUCCESS_KEY, true,
                 "message", "Lobby erfolgreich verlassen"
             ));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of(
-                "success", false,
-                "error", "Fehler beim Verlassen der Lobby: " + e.getMessage()
+                SUCCESS_KEY, false,
+                ERROR_KEY, "Fehler beim Verlassen der Lobby: " + e.getMessage()
             ));
         }
     }

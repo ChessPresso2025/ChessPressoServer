@@ -6,12 +6,15 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 @Component
 public class ConnectionStatusBroadcaster {
     private final OnlinePlayerService onlinePlayerService;
     private final SimpMessagingTemplate simpMessagingTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(ConnectionStatusBroadcaster.class);
 
     public ConnectionStatusBroadcaster(SimpMessagingTemplate simpMessagingTemplate, OnlinePlayerService onlinePlayerService) {
         this.simpMessagingTemplate = simpMessagingTemplate;
@@ -33,8 +36,8 @@ public class ConnectionStatusBroadcaster {
             );
             simpMessagingTemplate.convertAndSend("/topic/players", publicMessage);
         } catch (Exception e) {
-            System.out.println("Failed to send public message: " + e.getMessage());
+            logger.error("Failed to send public message: {}", e.getMessage());
         }
-        System.out.println("Broadcasted players status to players: " + onlinePlayerService.getOnlinePlayers());
+        logger.info("Broadcasted players status to players: {}", onlinePlayerService.getOnlinePlayers());
     }
 }

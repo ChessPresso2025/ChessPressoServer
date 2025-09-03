@@ -47,7 +47,7 @@ public class LobbyApiController {
                     lobbyMap.put("createdAt", lobby.getCreatedAt() != null ? lobby.getCreatedAt().toString() : "Unbekannt");
                     return lobbyMap;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
             Map<String, Object> response = new HashMap<>();
             response.put(SUCCESS_KEY, true);

@@ -8,11 +8,14 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class LobbyCodeGenerator {
     private static final String CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ123456789";
     private static final SecureRandom random = new SecureRandom();
+    private static final Logger logger = LoggerFactory.getLogger(LobbyCodeGenerator.class);
 
     // Liste zum Speichern aller verwendeten Lobby-Codes
     private final List<String> usedLobbyIds = new ArrayList<>();
@@ -29,7 +32,7 @@ public class LobbyCodeGenerator {
         
         do {
             code = generateRandomCode(codeLength);
-            System.out.println("DEBUG: Generated candidate code: " + code);
+            logger.debug("Generated candidate code: {}", code);
         } while (isCodeInUse(code));
 
         // Code zur Liste hinzufügen

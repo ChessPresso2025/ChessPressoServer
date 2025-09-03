@@ -23,7 +23,6 @@ public class LobbyController {
 
     private final LobbyService lobbyService;
     private final UserService userService;
-    private final GameStartHandler gameStartHandler;
 
     private static final String SUCCESS_KEY = "success";
     private static final String ERROR_KEY = "error";
@@ -33,7 +32,6 @@ public class LobbyController {
     public LobbyController(LobbyService lobbyService, UserService userService, GameStartHandler gameStartHandler) {
         this.lobbyService = lobbyService;
         this.userService = userService;
-        this.gameStartHandler = gameStartHandler;
         // Setze GameStartHandler im LobbyService für automatischen Spielstart
         this.lobbyService.setGameStartHandler(gameStartHandler);
     }

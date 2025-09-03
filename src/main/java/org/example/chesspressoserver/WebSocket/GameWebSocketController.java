@@ -10,6 +10,8 @@ import org.springframework.stereotype.Controller;
 import java.security.Principal;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Controller
 public class GameWebSocketController {
@@ -18,6 +20,7 @@ public class GameWebSocketController {
 
     private final OnlinePlayerService onlinePlayerService;
     private final SimpMessagingTemplate messagingTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(GameWebSocketController.class);
 
     public GameWebSocketController(OnlinePlayerService onlinePlayerService, SimpMessagingTemplate messagingTemplate) {
         this.onlinePlayerService = onlinePlayerService;
@@ -31,20 +34,20 @@ public class GameWebSocketController {
         // Versuche Player-ID aus dem Principal zu holen
         if (principal != null && !principal.getName().equals(ANONYMOUS)) {
             playerId = principal.getName();
-            System.out.println("Heartbeat from authenticated user: " + playerId);
+            logger.info("Heartbeat from authenticated user: {}", playerId);
         }
 
         // Fallback: Versuche Player-ID aus der Nachricht zu holen
         if (playerId == null && heartbeatData != null && heartbeatData.containsKey(PLAYER_ID)) {
             playerId = (String) heartbeatData.get(PLAYER_ID);
-            System.out.println("Heartbeat from message payload, playerId: " + playerId);
+            logger.info("Heartbeat from message payload, playerId: {}", playerId);
         }
 
         if (playerId != null && !playerId.equals(ANONYMOUS)) {
             onlinePlayerService.updateHeartbeat(playerId);
-            System.out.println("Updated heartbeat for player: " + playerId);
+            logger.info("Updated heartbeat for player: {}", playerId);
         } else {
-            System.out.println("Heartbeat received but no valid playerId found");
+            logger.warn("Heartbeat received but no valid playerId found");
         }
     }
 
@@ -93,7 +96,7 @@ public class GameWebSocketController {
 
         if (playerId != null && !playerId.equals(ANONYMOUS)) {
             onlinePlayerService.removePlayer(playerId);
-            System.out.println("App closing - Player " + playerId + " removed from online list. Reason: " + reason);
+            logger.info("App closing - Player {} removed from online list. Reason: {}", playerId, reason);
 
             // Sofortige Aktualisierung der Online-Spieler-Liste mit Fehlerbehandlung
             try {
@@ -105,12 +108,12 @@ public class GameWebSocketController {
                 );
                 messagingTemplate.convertAndSend("/topic/players", updateMessage);
 
-                System.out.println("Server-Status nach App-Schließung - " + onlinePlayers.size() + " Clients online: " + onlinePlayers);
+                logger.info("Server-Status nach App-Schließung - {} Clients online: {}", onlinePlayers.size(), onlinePlayers);
             } catch (Exception e) {
-                System.out.println("Error sending update after app closing: " + e.getMessage());
+                logger.error("Error sending update after app closing: {}", e.getMessage());
             }
         } else {
-            System.out.println("App closing message received but no valid playerId found");
+            logger.warn("App closing message received but no valid playerId found");
         }
     }
 

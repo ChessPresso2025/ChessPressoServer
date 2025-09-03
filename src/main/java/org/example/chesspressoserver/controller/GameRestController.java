@@ -13,7 +13,6 @@ import org.example.chesspressoserver.models.gamemodels.Position;
 import org.example.chesspressoserver.models.gamemodels.TeamColor;
 import org.example.chesspressoserver.models.requests.*;
 import org.example.chesspressoserver.service.LobbyService;
-import org.example.chesspressoserver.service.GameHistoryService;
 import org.example.chesspressoserver.service.StatsService;
 import org.example.chesspressoserver.service.UserService;
 import org.example.chesspressoserver.repository.GameRepository;
@@ -29,6 +28,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 public class GameRestController implements GameStartHandler {
@@ -37,22 +38,21 @@ public class GameRestController implements GameStartHandler {
     private final SimpMessagingTemplate messagingTemplate;
     private final LobbyService lobbyService;
     private final UserService userService;
-    private final GameHistoryService gameHistoryService;
     private final GameRepository gameRepository;
     private final StatsService statsService;
+    private final SimpUserRegistry simpUserRegistry;
+
+    private static final Logger logger = LoggerFactory.getLogger(GameRestController.class);
 
     @Autowired
-    private SimpUserRegistry simpUserRegistry;
-
-    @Autowired
-    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService, GameHistoryService gameHistoryService, GameRepository gameRepository, StatsService statsService) {
+    public GameRestController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, LobbyService lobbyService, UserService userService, GameRepository gameRepository, StatsService statsService, SimpUserRegistry simpUserRegistry) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
         this.lobbyService = lobbyService;
         this.userService = userService;
-        this.gameHistoryService = gameHistoryService;
         this.gameRepository = gameRepository;
         this.statsService = statsService;
+        this.simpUserRegistry = simpUserRegistry;
     }
 
     private static final String TOPIC_LOBBY_PREFIX = "/topic/lobby/";
@@ -60,7 +60,7 @@ public class GameRestController implements GameStartHandler {
 
     @Override
     public void startGame(StartGameRequest request) {
-        System.out.println("Received start request: " + request);
+        logger.info("Received start request: {}", request);
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
             // Rückgabe für REST, für Interface-Call ignorieren
             return;
@@ -171,7 +171,7 @@ public class GameRestController implements GameStartHandler {
         Optional<User> blackUserOpt = userService.getUserById(lobby.getBlackPlayer());
         UUID whiteId = whiteUserOpt.map(User::getId).orElse(null);
         UUID blackId = blackUserOpt.map(User::getId).orElse(null);
-        System.out.println("weißer spieler: " + (whiteId != null ? whiteId.toString() : null) + "  schwarzer spieler: " + (blackId != null ? blackId.toString() : null) );
+        logger.info("weißer spieler: {}  schwarzer spieler: {}", (whiteId != null ? whiteId.toString() : null), (blackId != null ? blackId.toString() : null) );
 
         boolean draw = endType == EndType.AGREED_DRAW;
         boolean success = true;
@@ -376,18 +376,18 @@ public class GameRestController implements GameStartHandler {
         String fromPlayerId = userService.getUserByUsername(fromPlayerName).get().getId().toString();
         String toPlayerId = players.stream().filter(id -> !id.equals(fromPlayerId)). findFirst().orElse(null);
         if (toPlayerId == null) return;
-        System.out.println("[Rematch] Principal: " + (principal != null ? principal.getName() : "null") + ", fromPlayerId: " + fromPlayerId + ", toPlayerId: " + toPlayerId);
+        logger.info("[Rematch] Principal: {}, fromPlayerId: {}, toPlayerId: {}", (principal != null ? principal.getName() : "null"), fromPlayerId, toPlayerId);
         // Aktive User-Principals loggen
-        System.out.println("[Rematch] Aktive User im SimpUserRegistry:");
+        logger.info("[Rematch] Aktive User im SimpUserRegistry:");
         simpUserRegistry.getUsers().forEach(user -> {
-            System.out.println("  User: '" + user.getName() + "' Sessions: " + user.getSessions().size());
-            user.getSessions().forEach(session -> System.out.println("    SessionId: " + session.getId()));
+            logger.info("  User: '{}' Sessions: {}", user.getName(), user.getSessions().size());
+            user.getSessions().forEach(session -> logger.info("    SessionId: {}", session.getId()));
         });
         // Sende RematchOffer an das Lobby-Topic, Empfänger im Payload
         RematchOffer offer = new RematchOffer(
             lobby.getLobbyId(), fromPlayerId, userService.getUsernameById(toPlayerId));
         messagingTemplate.convertAndSend(TOPIC_LOBBY_PREFIX + lobby.getLobbyId() + "/rematch-offer", offer);
-        System.out.println("[Rematch] Sent offer to topic: " + TOPIC_LOBBY_PREFIX + lobby.getLobbyId() + "/rematch-offer");
+        logger.info("[Rematch] Sent offer to topic: {}", TOPIC_LOBBY_PREFIX + lobby.getLobbyId() + "/rematch-offer");
     }
 
     @MessageMapping("/lobby/rematch/response")
@@ -421,7 +421,7 @@ public class GameRestController implements GameStartHandler {
                     userService.getUsernameById(lobby.getBlackPlayer()),
                     true)
             );
-            System.out.println("neuer lobby code: " + newLobbyCode);
+            logger.info("neuer lobby code: {}", newLobbyCode);
         }else{
             RematchResult result = new RematchResult(lobby.getLobbyId(), response.getResponse(), null);
             messagingTemplate.convertAndSend(TOPIC_LOBBY_PREFIX + lobby.getLobbyId() + "/rematch-result", result);
@@ -431,7 +431,7 @@ public class GameRestController implements GameStartHandler {
     @MessageMapping("/game/start")
     public GameStartResponse startGameRest(StartGameRequest request) {
         // Die bisherige Logik, aber Rückgabe für REST
-        System.out.println("Received start request: " + request);
+        logger.info("Received start request: {}", request);
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
             return new GameStartResponse(false, null, null, null, null, "", null, "Lobby-ID fehlt");
         }
@@ -452,7 +452,7 @@ public class GameRestController implements GameStartHandler {
         Optional<User> blackUserOpt = userService.getUserById(lobby.getBlackPlayer());
         if (whiteUserOpt.isEmpty() || blackUserOpt.isEmpty()) {
             String missing = whiteUserOpt.isEmpty() ? "WhitePlayer ('" + lobby.getWhitePlayer() + "')" : "BlackPlayer ('" + lobby.getBlackPlayer() + "')";
-            System.out.println("Spieler nicht in der Datenbank gefunden: " + missing);
+            logger.warn("Spieler nicht in der Datenbank gefunden: {}", missing);
             return new GameStartResponse(false, request.getLobbyId(), request.getGameTime(),
                     whiteUserOpt.map(User::getUsername).orElse(null),
                     blackUserOpt.map(User::getUsername).orElse(null),

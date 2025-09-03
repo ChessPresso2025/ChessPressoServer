@@ -15,20 +15,26 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class AuthService {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+    private final UserStatsRepository userStatsRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     @Autowired
-    private UserStatsRepository userStatsRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private JwtService jwtService;
+    public AuthService(UserRepository userRepository, UserStatsRepository userStatsRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+        this.userRepository = userRepository;
+        this.userStatsRepository = userStatsRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+    }
 
     @Transactional
     public TokenResponse register(RegisterRequest request) {
@@ -71,7 +77,7 @@ public class AuthService {
             );
 
         } catch (DataIntegrityViolationException e) {
-            System.err.println("Data integrity violation during registration: " + e.getMessage());
+            logger.error("Data integrity violation during registration: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username oder Email bereits vergeben");
         }
     }

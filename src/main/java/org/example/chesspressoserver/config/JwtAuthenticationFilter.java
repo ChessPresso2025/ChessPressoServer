@@ -5,12 +5,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.example.chesspressoserver.service.JwtService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import java.io.IOException;
 import java.util.Collections;
@@ -18,10 +20,13 @@ import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
-    @Autowired
-    private JwtService jwtService;
+    private final JwtService jwtService;
 
+    public JwtAuthenticationFilter(JwtService jwtService) {
+        this.jwtService = jwtService;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
@@ -43,7 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             } catch (Exception e) {
                 System.err.println("Invalid JWT token: " + e.getMessage());
-                // Für WebSocket-Verbindungen nicht den Response blockieren
+                logger.warn("Invalid JWT token: {}", e.getMessage());
                 if (!request.getRequestURI().startsWith("/ws") && !request.getRequestURI().startsWith("/websocket")) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     return;

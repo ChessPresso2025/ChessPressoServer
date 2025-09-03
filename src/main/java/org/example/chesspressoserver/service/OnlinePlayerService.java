@@ -9,8 +9,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class OnlinePlayerService {
+
+    private static final Logger logger = LoggerFactory.getLogger(OnlinePlayerService.class);
 
     private final Map<String, Instant> lastSeenMap = new ConcurrentHashMap<>();
     private final Duration TIMEOUT = Duration.ofSeconds(45); // Reduziert auf 45 Sekunden - Client sendet alle 30 Sekunden
@@ -54,7 +59,7 @@ public class OnlinePlayerService {
         playersToRemove.forEach(lastSeenMap::remove);
         
         if (!playersToRemove.isEmpty()) {
-            System.out.println("Removed inactive players: " + playersToRemove);
+            logger.info("Removed inactive players: {}", playersToRemove);
         }
     }
 

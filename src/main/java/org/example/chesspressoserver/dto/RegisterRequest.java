@@ -3,9 +3,15 @@ package org.example.chesspressoserver.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.Setter;
 
+
+@Setter
+@Getter
 public class RegisterRequest {
 
+    // Getter und Setter
     @NotBlank(message = "Username ist erforderlich")
     @Size(min = 3, max = 50, message = "Username muss zwischen 3 und 50 Zeichen lang sein")
     private String username;
@@ -18,13 +24,4 @@ public class RegisterRequest {
     @Size(min = 3, message = "Passwort muss mindestens 3 Zeichen lang sein")
     private String password;
 
-    // Getter und Setter
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
 }

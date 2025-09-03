@@ -54,9 +54,6 @@ public class Lobby {
         return players.size() >= 2;
     }
 
-    public boolean canStart() {
-        return players.size() == 2 && gameTime != null;
-    }
 
     public void addPlayer(String playerId) {
         if (!isFull() && !players.contains(playerId)) {
@@ -78,29 +75,7 @@ public class Lobby {
         return lobbyType == LobbyType.PUBLIC;
     }
 
-    public void setPlayerReady(String playerId, boolean ready) {
-        if (players.contains(playerId)) {
-            playerReadyStatus.put(playerId, ready);
-        }
-    }
 
-    public boolean isPlayerReady(String playerId) {
-        return playerReadyStatus.getOrDefault(playerId, false);
-    }
-
-    public boolean areAllPlayersReady() {
-        if (players.size() < 2) {
-            return false;
-        }
-        
-        for (String playerId : players) {
-            if (!playerReadyStatus.getOrDefault(playerId, false)) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
 
     public Map<String, Boolean> getPlayerReadyStatus() {
         return new HashMap<>(playerReadyStatus);

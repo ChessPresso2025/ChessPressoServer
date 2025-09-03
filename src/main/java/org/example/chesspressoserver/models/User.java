@@ -2,6 +2,7 @@ package org.example.chesspressoserver.models;
 
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -12,16 +13,25 @@ import java.util.UUID;
 @Table(name = "users")
 public class User {
 
+    // Getter und Setter
+    @Setter
+    @Getter
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Setter
+    @Getter
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Setter
+    @Getter
     @Column(unique = true, nullable = false)
     private String email;
 
+    @Setter
+    @Getter
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
@@ -42,24 +52,6 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
-    // Getter und Setter
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
-
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     // Builder-Pattern für einfache Erstellung
     public static UserBuilder builder() {

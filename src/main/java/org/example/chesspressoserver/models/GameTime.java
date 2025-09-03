@@ -12,11 +12,4 @@ public enum GameTime {
         this.seconds = seconds;
     }
 
-    public int getSeconds() {
-        return seconds;
-    }
-
-    public boolean isUnlimited() {
-        return this == UNLIMITED;
-    }
 }

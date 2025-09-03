@@ -62,8 +62,8 @@ public class JwtService {
             return signedJWT.serialize();
 
         } catch (JOSEException e) {
-            System.err.println("Error generating JWT token: " + e.getMessage());
-            throw new RuntimeException("Failed to generate JWT token", e);
+            System.err.println("Error generating JWT token: ");
+            throw new RuntimeException("Failed to generate JWT token");
         }
     }
 
@@ -85,8 +85,8 @@ public class JwtService {
             return UUID.fromString(claims.getSubject());
 
         } catch (ParseException | JOSEException e) {
-            System.err.println("Error parsing JWT token: " + e.getMessage());
-            throw new RuntimeException("Invalid JWT token", e);
+            System.err.println("Error parsing JWT token: ");
+            throw new RuntimeException("Invalid JWT token");
         }
     }
 
@@ -108,8 +108,8 @@ public class JwtService {
             return claims.getStringClaim("uname");
 
         } catch (ParseException | JOSEException e) {
-            System.err.println("Error parsing JWT token: " + e.getMessage());
-            throw new RuntimeException("Invalid JWT token", e);
+            System.err.println("Error parsing JWT token: ");
+            throw new RuntimeException("Invalid JWT token");
         }
     }
 

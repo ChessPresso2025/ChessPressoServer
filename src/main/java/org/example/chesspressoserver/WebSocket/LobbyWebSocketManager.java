@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service zur Überwachung und Verwaltung von Lobby-WebSocket-Verbindungen

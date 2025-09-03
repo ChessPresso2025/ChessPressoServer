@@ -1,7 +1,6 @@
 package org.example.chesspressoserver.service;
 
 import lombok.Setter;
-import org.example.chesspressoserver.controller.GameRestController;
 import org.example.chesspressoserver.models.Lobby;
 import org.example.chesspressoserver.models.LobbyStatus;
 import org.example.chesspressoserver.models.GameTime;
@@ -321,9 +320,6 @@ public class LobbyService {
         return activeLobbies.get(lobbyId);
     }
 
-    public Collection<Lobby> getAllLobbies() {
-        return activeLobbies.values();
-    }
 
     public Collection<Lobby> getAllActiveLobbies() {
         return activeLobbies.values();

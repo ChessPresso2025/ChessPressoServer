@@ -6,7 +6,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 import java.security.Principal;
 
 @RestController
@@ -130,7 +129,7 @@ public class LobbyApiController {
                 .count();
 
             long gameStartedLobbies = allLobbies.stream()
-                .filter(lobby -> lobby.isGameStarted())
+                .filter(Lobby::isGameStarted)
                 .count();
 
             Map<String, Object> statistics = new HashMap<>();

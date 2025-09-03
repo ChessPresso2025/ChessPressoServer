@@ -59,10 +59,6 @@ public class UserController {
         }
         String userId = authentication.getName();
         var profileOpt = userService.getUserProfile(userId);
-        if (profileOpt.isPresent()) {
-            return ResponseEntity.ok(profileOpt.get());
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Nutzer nicht gefunden");
-        }
+        return profileOpt.<ResponseEntity<Object>>map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Nutzer nicht gefunden"));
     }
 }

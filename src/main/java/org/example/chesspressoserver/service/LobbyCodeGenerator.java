@@ -23,9 +23,7 @@ public class LobbyCodeGenerator {
 
     public String generateLobbyCode(LobbyType lobbyType) {
         String code;
-        
-        System.out.println("DEBUG: Generating new lobby code for type: " + lobbyType);
-        System.out.println("DEBUG: Currently used codes: " + usedLobbyIds.size());
+
 
         int codeLength = (lobbyType == LobbyType.PRIVATE) ? 6 : 12;
         
@@ -36,7 +34,6 @@ public class LobbyCodeGenerator {
 
         // Code zur Liste hinzufügen
         usedLobbyIds.add(code);
-        System.out.println("DEBUG: Added code to used list. Total used codes: " + usedLobbyIds.size());
         return code;
     }
 

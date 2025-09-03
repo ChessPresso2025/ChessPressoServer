@@ -29,9 +29,9 @@ public class LobbyService {
     private final Map<GameTime, Queue<String>> quickMatchQueues = new ConcurrentHashMap<>();
     private final UserService userService;
 
-    // Setter für GameRestController (für zirkuläre Abhängigkeit oder nachträgliches Setzen)
+    // Setter für GameStartHandler (entkoppelt von GameRestController)
     @Setter
-    private GameRestController gameRestController;
+    private GameStartHandler gameStartHandler;
 
     public LobbyService(LobbyCodeGenerator lobbyCodeGenerator, SimpMessagingTemplate messagingTemplate, UserService userService) {
         this.lobbyCodeGenerator = lobbyCodeGenerator;
@@ -94,19 +94,19 @@ public class LobbyService {
                     ));
 
                 // Automatischer Spielstart, wenn zwei Spieler in der Lobby sind
-                if (lobby.getPlayers().size() == 2 && gameRestController != null) {
+                if (lobby.getPlayers().size() == 2 && gameStartHandler != null) {
                     StartGameRequest startReq = new StartGameRequest();
                     startReq.setLobbyId(lobby.getLobbyId());
                     startReq.setGameTime(lobby.getGameTime().name());
                     startReq.setRandomPlayers(true); // Quick-Match: Farben zufällig
-                    // Spieler werden im GameRestController zufällig zugewiesen
+                    // Spieler werden im GameStartHandler zufällig zugewiesen
                     new Thread(() -> {
                         try {
                             Thread.sleep(400); // 400ms Delay für Client-Subscription
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         }
-                        gameRestController.startGame(startReq);
+                        gameStartHandler.startGame(startReq);
                     }).start();
                 }
                 return lobbyId;
@@ -133,7 +133,6 @@ public class LobbyService {
         Lobby lobby = activeLobbies.get(lobbyCode);
 
         if (lobby == null) {
-            System.out.println("DEBUG: Lobby not found for code: " + lobbyCode);
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
                 Map.of(
                     "type", "LOBBY_ERROR",
@@ -143,7 +142,6 @@ public class LobbyService {
         }
 
         if (lobby.isFull()) {
-            System.out.println("DEBUG: Lobby is full");
             messagingTemplate.convertAndSendToUser(playerId, "/queue/lobby-error",
                 Map.of(
                     "type", "LOBBY_ERROR",

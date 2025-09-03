@@ -31,6 +31,8 @@ public class GameMessageController {
     private final GameRepository gameRepository;
     private final GameRestController gameRestController;
 
+    private static final String TOPIC_GAME_PREFIX = "/topic/game/";
+
     public GameMessageController(GameManager gameManager, SimpMessagingTemplate messagingTemplate, MoveRepository moveRepository, GameRepository gameRepository, GameRestController gameController) {
         this.gameManager = gameManager;
         this.messagingTemplate = messagingTemplate;
@@ -47,7 +49,7 @@ public class GameMessageController {
         if (gameController == null) return;
         List<String> moves = gameController.getMovesForRequestAsString(position);
         messagingTemplate.convertAndSend(
-                "/topic/game/" + lobbyId + "/possible-moves",
+                TOPIC_GAME_PREFIX + lobbyId + "/possible-moves",
                 Map.of("type", "possible-moves", "possibleMoves", moves)
         );
     }
@@ -65,7 +67,7 @@ public class GameMessageController {
         ChessPiece moving = gameController.getBoard().getPiece(start.getY(), start.getX());
         boolean isPromotion = checkPromotion(end, moving);
         if(isPromotion && (promotedPiece == null || promotedPiece == PieceType.NULL)) {
-            messagingTemplate.convertAndSend("/topic/game/" + moveRequest.lobbyId + "/move/promotion",
+            messagingTemplate.convertAndSend(TOPIC_GAME_PREFIX + moveRequest.lobbyId + "/move/promotion",
                 new PromotionRequest(moveRequest.to, moveRequest.from, moveRequest.teamColor));
             return;
         }
@@ -102,14 +104,14 @@ public class GameMessageController {
         if(!gameController.isStalemate(gameController.getAktiveTeam())){
         // Sende die Response
         messagingTemplate.convertAndSend(
-            "/topic/game/" + moveRequest.lobbyId + "/move",
+            TOPIC_GAME_PREFIX + moveRequest.lobbyId + "/move",
             new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(),
                 moveRequest.lobbyId, sendMove, checkMatePositions, false)
         );}
         else{
             // Sende die Response bei Patt
             messagingTemplate.convertAndSend(
-                "/topic/game/" + moveRequest.lobbyId + "/move",
+                TOPIC_GAME_PREFIX + moveRequest.lobbyId + "/move",
         new MoveResponse(boardMap, isCheck, gameController.getAktiveTeam(),
             moveRequest.lobbyId, sendMove, checkMatePositions, true)
         );

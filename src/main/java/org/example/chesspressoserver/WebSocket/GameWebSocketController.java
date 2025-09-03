@@ -13,6 +13,8 @@ import java.util.Set;
 
 @Controller
 public class GameWebSocketController {
+    private static final String ANONYMOUS = "anonymous";
+    private static final String PLAYER_ID = "playerId";
 
     private final OnlinePlayerService onlinePlayerService;
     private final SimpMessagingTemplate messagingTemplate;
@@ -27,18 +29,18 @@ public class GameWebSocketController {
         String playerId = null;
 
         // Versuche Player-ID aus dem Principal zu holen
-        if (principal != null && !principal.getName().equals("anonymous")) {
+        if (principal != null && !principal.getName().equals(ANONYMOUS)) {
             playerId = principal.getName();
             System.out.println("Heartbeat from authenticated user: " + playerId);
         }
 
         // Fallback: Versuche Player-ID aus der Nachricht zu holen
-        if (playerId == null && heartbeatData != null && heartbeatData.containsKey("playerId")) {
-            playerId = (String) heartbeatData.get("playerId");
+        if (playerId == null && heartbeatData != null && heartbeatData.containsKey(PLAYER_ID)) {
+            playerId = (String) heartbeatData.get(PLAYER_ID);
             System.out.println("Heartbeat from message payload, playerId: " + playerId);
         }
 
-        if (playerId != null && !playerId.equals("anonymous")) {
+        if (playerId != null && !playerId.equals(ANONYMOUS)) {
             onlinePlayerService.updateHeartbeat(playerId);
             System.out.println("Updated heartbeat for player: " + playerId);
         } else {
@@ -49,7 +51,7 @@ public class GameWebSocketController {
     @MessageMapping("/connect")
     @SendTo("/topic/players")
     public String handlePlayerConnect(Principal principal) {
-        String playerId = principal != null ? principal.getName() : "anonymous";
+        String playerId = principal != null ? principal.getName() : ANONYMOUS;
         onlinePlayerService.updateHeartbeat(playerId);
         return "Player " + playerId + " connected";
     }
@@ -57,14 +59,14 @@ public class GameWebSocketController {
     @MessageMapping("/players")
     public void getOnlinePlayers(Principal principal) {
         Set<String> onlinePlayers = onlinePlayerService.getOnlinePlayers();
-        String playerId = principal != null ? principal.getName() : "anonymous";
+        String playerId = principal != null ? principal.getName() : ANONYMOUS;
         messagingTemplate.convertAndSendToUser(playerId, "/queue/players", onlinePlayers);
     }
 
     @MessageMapping("/game/join")
     @SendTo("/topic/game")
     public String handleGameJoin(Principal principal) {
-        String playerId = principal != null ? principal.getName() : "anonymous";
+        String playerId = principal != null ? principal.getName() : ANONYMOUS;
         onlinePlayerService.updateHeartbeat(playerId);
         return "Player " + playerId + " wants to join game";
     }
@@ -75,13 +77,13 @@ public class GameWebSocketController {
         String reason = null;
 
         // Versuche Player-ID aus dem Principal zu holen
-        if (principal != null && !principal.getName().equals("anonymous")) {
+        if (principal != null && !principal.getName().equals(ANONYMOUS)) {
             playerId = principal.getName();
         }
 
         // Fallback: Versuche Player-ID aus der Nachricht zu holen
-        if (playerId == null && closingData != null && closingData.containsKey("playerId")) {
-            playerId = (String) closingData.get("playerId");
+        if (playerId == null && closingData != null && closingData.containsKey(PLAYER_ID)) {
+            playerId = (String) closingData.get(PLAYER_ID);
         }
 
         // Extrahiere Grund für das Schließen
@@ -89,7 +91,7 @@ public class GameWebSocketController {
             reason = (String) closingData.get("reason");
         }
 
-        if (playerId != null && !playerId.equals("anonymous")) {
+        if (playerId != null && !playerId.equals(ANONYMOUS)) {
             onlinePlayerService.removePlayer(playerId);
             System.out.println("App closing - Player " + playerId + " removed from online list. Reason: " + reason);
 

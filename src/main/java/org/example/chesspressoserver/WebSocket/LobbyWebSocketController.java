@@ -16,6 +16,7 @@ import java.util.Map;
 @Controller
 public class LobbyWebSocketController {
 
+
     private final LobbyService lobbyService;
     private final SimpMessagingTemplate messagingTemplate;
     private final JwtService jwtService;

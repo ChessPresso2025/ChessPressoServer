@@ -7,6 +7,7 @@ import lombok.Setter;
 import org.example.chesspressoserver.models.GameTime;
 import org.example.chesspressoserver.service.LobbyService;
 import org.example.chesspressoserver.service.UserService;
+import org.example.chesspressoserver.service.GameStartHandler;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,14 +23,14 @@ public class LobbyController {
 
     private final LobbyService lobbyService;
     private final UserService userService;
-    private final GameRestController gameRestController;
+    private final GameStartHandler gameStartHandler;
 
-    public LobbyController(LobbyService lobbyService, UserService userService, GameRestController gameRestController) {
+    public LobbyController(LobbyService lobbyService, UserService userService, GameStartHandler gameStartHandler) {
         this.lobbyService = lobbyService;
         this.userService = userService;
-        this.gameRestController = gameRestController;
-        // Setze GameRestController im LobbyService für automatischen Spielstart
-        this.lobbyService.setGameRestController(gameRestController);
+        this.gameStartHandler = gameStartHandler;
+        // Setze GameStartHandler im LobbyService für automatischen Spielstart
+        this.lobbyService.setGameStartHandler(gameStartHandler);
     }
 
 
@@ -39,7 +40,6 @@ public class LobbyController {
         String playerId = principal != null ? principal.getName() :
                          httpRequest.getSession().getId();
 
-        System.out.println("DEBUG: Quick join request from player: " + playerId);
 
         // Prüfe ob Spieler bereits in einer Lobby ist
         String existingLobby = lobbyService.getPlayerLobby(playerId);
@@ -56,7 +56,6 @@ public class LobbyController {
                 ));
             } else {
                 // Lobby existiert nicht mehr oder Spiel ist beendet - räume auf
-                System.out.println("DEBUG: Cleaning up stale lobby reference for player: " + playerId);
                 lobbyService.forceLeaveAllLobbies(playerId);
             }
         }
@@ -91,12 +90,9 @@ public class LobbyController {
 
         String playerName = userService.getUsernameById(playerId);
 
-        System.out.println("DEBUG: Create lobby request from player: " + playerName);
-
         // Prüfe ob Spieler bereits in einer Lobby ist
         String existingLobby = lobbyService.getPlayerLobby(playerId);
         if (existingLobby != null) {
-            System.out.println("DEBUG: Player already in lobby: " + existingLobby + ", cleaning up");
             lobbyService.forceLeaveAllLobbies(playerId);
         }
 
@@ -125,13 +121,9 @@ public class LobbyController {
 
         String playerName = userService.getUsernameById(playerId);
 
-        System.out.println("DEBUG: Join lobby request from player: " + playerId);
-        System.out.println("DEBUG: Trying to join lobby: " + request.getLobbyCode());
-
         // Prüfe ob Spieler bereits in einer Lobby ist
         String existingLobby = lobbyService.getPlayerLobby(playerId);
         if (existingLobby != null) {
-            System.out.println("DEBUG: Player already in lobby: " + existingLobby + ", cleaning up");
             lobbyService.forceLeaveAllLobbies(playerId);
         }
 

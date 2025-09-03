@@ -75,25 +75,7 @@ public class Lobby {
         return lobbyType == LobbyType.PUBLIC;
     }
 
-    public void setPlayerReady(String playerId, boolean ready) {
-        if (players.contains(playerId)) {
-            playerReadyStatus.put(playerId, ready);
-        }
-    }
 
-    public boolean areAllPlayersReady() {
-        if (players.size() < 2) {
-            return false;
-        }
-        
-        for (String playerId : players) {
-            if (!playerReadyStatus.getOrDefault(playerId, false)) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
 
     public Map<String, Boolean> getPlayerReadyStatus() {
         return new HashMap<>(playerReadyStatus);

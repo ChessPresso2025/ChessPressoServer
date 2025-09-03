@@ -24,6 +24,8 @@ public class WebSocketEventListener {
 
     // Pattern um Lobby-IDs aus Subscription-Destinations zu extrahieren
     private static final Pattern LOBBY_TOPIC_PATTERN = Pattern.compile("/topic/lobby/([a-zA-Z0-9]+)");
+    private static final String ANONYMOUS = "anonymous";
+    private static final String PLAYER_PREFIX = "Player ";
 
     public WebSocketEventListener(OnlinePlayerService onlinePlayerService,
                                 ConnectionStatusBroadcaster connectionStatusBroadcaster,
@@ -41,12 +43,12 @@ public class WebSocketEventListener {
         Principal user = headerAccessor.getUser();
         String sessionId = headerAccessor.getSessionId();
 
-        System.out.println("WebSocket Connected - Session: " + sessionId + ", User: " + (user != null ? user.getName() : "anonymous"));
+        System.out.println("WebSocket Connected - Session: " + sessionId + ", User: " + (user != null ? user.getName() : ANONYMOUS));
 
-        if (user != null && !user.getName().equals("anonymous")) {
+        if (user != null && !user.getName().equals(ANONYMOUS)) {
             String userName = user.getName();
             onlinePlayerService.updateHeartbeat(userName);
-            System.out.println("Player " + userName + " connected via WebSocket");
+            System.out.println(PLAYER_PREFIX + userName + " connected via WebSocket");
 
             try {
                 connectionStatusBroadcaster.broadcastPlayerUpdate();
@@ -73,7 +75,7 @@ public class WebSocketEventListener {
                 String lobbyId = matcher.group(1);
                 String playerId = user.getName();
 
-                System.out.println("Player " + playerId + " subscribed to lobby " + lobbyId);
+                System.out.println(PLAYER_PREFIX + playerId + " subscribed to lobby " + lobbyId);
 
                 // Registriere die Verbindung in der Lobby-Verwaltung
                 lobbyManager.registerLobbyConnection(lobbyId, playerId);
@@ -106,7 +108,7 @@ public class WebSocketEventListener {
                 String lobbyId = matcher.group(1);
                 String playerId = user.getName();
 
-                System.out.println("Player " + playerId + " unsubscribed from lobby " + lobbyId);
+                System.out.println(PLAYER_PREFIX + playerId + " unsubscribed from lobby " + lobbyId);
 
                 // Entferne die Verbindung aus der Lobby-Verwaltung
                 lobbyManager.unregisterLobbyConnection(lobbyId, playerId);
@@ -120,11 +122,11 @@ public class WebSocketEventListener {
         Principal user = headerAccessor.getUser();
         String sessionId = headerAccessor.getSessionId();
 
-        System.out.println("WebSocket Disconnected - Session: " + sessionId + ", User: " + (user != null ? user.getName() : "anonymous"));
+        System.out.println("WebSocket Disconnected - Session: " + sessionId + ", User: " + (user != null ? user.getName() : ANONYMOUS));
 
-        if (user != null && !user.getName().equals("anonymous")) {
+        if (user != null && !user.getName().equals(ANONYMOUS)) {
             String userName = user.getName();
-            System.out.println("Player " + userName + " disconnected from WebSocket");
+            System.out.println(PLAYER_PREFIX + userName + " disconnected from WebSocket");
 
             // Entferne Spieler aus ALLEN Lobbies bei Disconnect
             for (String lobbyId : lobbyManager.getActiveLobbies()) {

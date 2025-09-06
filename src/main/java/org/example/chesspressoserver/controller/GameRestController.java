@@ -409,17 +409,17 @@ public class GameRestController implements GameStartHandler {
             messagingTemplate.convertAndSend(TOPIC_LOBBY_PREFIX + lobby.getLobbyId() + "/rematch-result", result);
             lobbyService.closeLobby(lobby.getLobbyId());
             try {
-                Thread.sleep(500); // 500ms Verzögerung, damit Clients subscriben können
+                Thread.sleep(1000); // 500ms Verzögerung, damit Clients subscriben können
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
             // Starte das neue Spiel wie bei normalem Start
-            startGame(new StartGameRequest(
+            startGameRest(new StartGameRequest(
                     newLobbyCode,
                     lobby.getGameTime().name(),
                     userService.getUsernameById(lobby.getWhitePlayer()),
                     userService.getUsernameById(lobby.getBlackPlayer()),
-                    true)
+                    lobby.isRandomColors())
             );
             logger.info("neuer lobby code: {}", newLobbyCode);
         }else{
@@ -430,7 +430,6 @@ public class GameRestController implements GameStartHandler {
 
     @MessageMapping("/game/start")
     public GameStartResponse startGameRest(StartGameRequest request) {
-        // Die bisherige Logik, aber Rückgabe für REST
         logger.info("Received start request: {}", request);
         if (request.getLobbyId() == null || request.getLobbyId().isEmpty()) {
             return new GameStartResponse(false, null, null, null, null, "", null, "Lobby-ID fehlt");
@@ -447,6 +446,10 @@ public class GameRestController implements GameStartHandler {
             }
         }
         lobby.setRandomColors(request.isRandomPlayers());
+        if(!lobby.isRandomColors()){
+            lobby.setWhitePlayer(userService.getIdByUsername(request.getWhitePlayer()).toString());
+            lobby.setBlackPlayer(userService.getIdByUsername(request.getBlackPlayer()).toString());
+        }
         lobbyService.startGame(lobby);
         Optional<User> whiteUserOpt = userService.getUserById(lobby.getWhitePlayer());
         Optional<User> blackUserOpt = userService.getUserById(lobby.getBlackPlayer());

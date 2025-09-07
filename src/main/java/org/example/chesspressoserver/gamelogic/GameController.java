@@ -73,62 +73,29 @@ public class GameController {
         TeamColor me = piece.getColour();
         TeamColor enemy = (me == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
 
-        // 1) Pseudo-Moves
+        // 1) Pseudo-Moves - ALLE möglichen Züge der Figur
         List<Position> moves = new ArrayList<>(piece.getMove().getPossibleMoves(startPos, board));
 
-        // 2) Sonderfälle
+        // 2) Sonderfälle hinzufügen
         if (piece.getType() == PieceType.KING) {
-            moves = getKingMovesWithCastling(startPos, moves);
-        } else {
-            if (piece.getType() == PieceType.PAWN) {
-                addEnPassantMoves(startPos, moves);
-            }
+            // Für König: Rochade hinzufügen (aber normale Züge NICHT filtern)
+            addCastlingMoves(startPos, moves);
+        } else if (piece.getType() == PieceType.PAWN) {
+            // Für Bauern: En Passant hinzufügen
+            addEnPassantMoves(startPos, moves);
+        }
 
-            // Wenn der König im Schach steht
-            Position myKing = board.getKingPosition(me);
-            if (!currentAttackers.isEmpty()) {
-                // Bei Doppelschach kann nur der König ziehen
-                if (currentAttackers.size() > 1) {
-                    moves.clear();
-                    return moves;
-                }
+        // 3) EINZIGE Filterung: Simuliere jeden Zug und prüfe ob König danach im Schach steht
+        Position myKing = board.getKingPosition(me);
+        List<Position> legalMoves = new ArrayList<>();
 
-                // Bei einzelnem Schach:
-                Position attacker = currentAttackers.get(0);
-
-                // 1. Erlaubte Züge sind das Schlagen des Angreifers
-                // 2. Oder Züge die zwischen König und Angreifer liegen (falls möglich)
-                List<Position> validSquares = new ArrayList<>();
-                validSquares.add(attacker); // Angreifer schlagen ist immer erlaubt
-
-                // Prüfe ob es eine direkte Linie zwischen König und Angreifer gibt
-                if (hasClearLine(myKing, attacker)) {
-                    validSquares.addAll(squaresBetweenExclusive(myKing, attacker));
-                }
-
-                // Behalte nur Züge, die entweder den Angreifer schlagen oder blockieren
-                moves.removeIf(move -> !validSquares.contains(move));
-            }
-
-            // Pin-Prüfung: Wenn die Figur zwischen eigenem König und einem Angreifer steht
-            Position attackerBehindPiece = checkStateAktiveTeam(startPos, piece);
-            if (attackerBehindPiece != null) {
-                // Die Figur ist gepinnt - sie darf sich nur auf der Linie zwischen König und Angreifer bewegen
-                List<Position> corridor = new ArrayList<>();
-                corridor.add(attackerBehindPiece); // Angreifer schlagen ist erlaubt
-                corridor.addAll(squaresBetweenExclusive(startPos, attackerBehindPiece)); // Zwischen Figur und Angreifer
-                corridor.addAll(squaresBetweenExclusive(myKing, startPos)); // Zwischen König und Figur
-
-                // Behalte nur Züge im Korridor
-                moves.removeIf(move -> !corridor.contains(move));
+        for (Position dst : moves) {
+            if (!leavesKingInCheck(startPos, dst, myKing, enemy)) {
+                legalMoves.add(dst);
             }
         }
 
-        // 3) King-Safety (Simulation)
-        Position myKing = board.getKingPosition(me);
-        moves.removeIf(dst -> leavesKingInCheck(startPos, dst, myKing, enemy));
-
-        return moves;
+        return legalMoves;
     }
 
     // =====================================================================
@@ -262,18 +229,13 @@ public class GameController {
     // Helpers: König, EP, King-Safety, Attacks, Geometrie, CastlingRights
     // =====================================================================
 
-    // Filtert King-Pseudo-Moves (keine angegriffenen Felder) + ergänzt Rochaden.
+    // Filtert King-Pseudo-Moves und ergänzt Rochaden.
     private List<Position> getKingMovesWithCastling(Position start, List<Position> pseudo) {
-        List<Position> legal = new ArrayList<>();
+        List<Position> legal = new ArrayList<>(pseudo); // Alle normalen Königszüge erstmal erlauben
         TeamColor me = aktiveTeam;
         TeamColor enemy = (me == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
 
-        // Normale King-Moves: Ziel darf nicht angegriffen sein
-        for (Position p : pseudo) {
-            if (!isSquareAttackedBy(enemy, p)) legal.add(p);
-        }
-
-        // Rochade (Startfeld darf nicht angegriffen sein)
+        // Rochade nur hinzufügen wenn König nicht im Schach steht
         if (!isSquareAttackedBy(enemy, start)) {
             int y = start.getY();
             int x = start.getX();
@@ -307,6 +269,40 @@ public class GameController {
             }
         }
         return legal;
+    }
+
+    // Fügt Rochade-Züge zu den König-Moves hinzu (vereinfacht)
+    private void addCastlingMoves(Position start, List<Position> moves) {
+        TeamColor me = aktiveTeam;
+        TeamColor enemy = (me == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
+
+        // Rochade nur wenn König nicht im Schach steht
+        if (isSquareAttackedBy(enemy, start)) return;
+
+        int y = start.getY();
+        int x = start.getX();
+
+        // kurze Rochade
+        boolean canK = (me == TeamColor.WHITE) ? castlingRights.isWhiteKingSide() : castlingRights.isBlackKingSide();
+        if (canK && board.checkEmpty(y, 5) && board.checkEmpty(y, 6)) {
+            ChessPiece rook = board.getPiece(y, 7);
+            if (rook != null && rook.getType() == PieceType.ROOK && rook.getColour() == me) {
+                if (!isSquareAttackedBy(enemy, new Position(5, y)) && !isSquareAttackedBy(enemy, new Position(6, y))) {
+                    moves.add(new Position(6, y));
+                }
+            }
+        }
+
+        // lange Rochade
+        boolean canQ = (me == TeamColor.WHITE) ? castlingRights.isWhiteQueenSide() : castlingRights.isBlackQueenSide();
+        if (canQ && board.checkEmpty(y, 1) && board.checkEmpty(y, 2) && board.checkEmpty(y, 3)) {
+            ChessPiece rook = board.getPiece(y, 0);
+            if (rook != null && rook.getType() == PieceType.ROOK && rook.getColour() == me) {
+                if (!isSquareAttackedBy(enemy, new Position(2, y)) && !isSquareAttackedBy(enemy, new Position(3, y))) {
+                    moves.add(new Position(2, y));
+                }
+            }
+        }
     }
 
     // Ergänzt En-Passant-Ziel (falls erlaubt) zu den Pseudo-Bauernzügen.
@@ -622,57 +618,14 @@ public class GameController {
             return false;
         }
 
-        // 1. Prüfe ob der König sich bewegen kann
-        List<String> kingMoves = getMovesForRequestAsString(kingPos);
-        if (kingMoves != null && !kingMoves.isEmpty()) {
-            return false; // König kann sich bewegen, kein Matt
-        }
-
-        // 2. Prüfe ob der König überhaupt im Schach steht
+        // 1. Prüfe ob der König überhaupt im Schach steht
         if (currentAttackers.isEmpty()) {
-            return false; // König steht nicht im Schach
+            return false; // König steht nicht im Schach, also kein Matt
         }
 
-        // 3. Bei Doppelschach und der König kann sich nicht bewegen -> Matt
-        if (currentAttackers.size() > 1) {
-            return true;
-        }
-
-        // 4. Bei einfachem Schach: Kann eine andere Figur helfen?
-        Position attacker = currentAttackers.get(0);
-        TeamColor enemy = (defendingTeam == TeamColor.WHITE) ? TeamColor.BLACK : TeamColor.WHITE;
-
-        // Prüfe alle verteidigenden Figuren
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
-                Position defenderPos = new Position(x, y);
-                ChessPiece piece = board.getPiece(y, x);
-
-                // Nur eigene Figuren außer dem König
-                if (piece != null && piece.getColour() == defendingTeam && !defenderPos.equals(kingPos)) {
-                    // Hole mögliche Züge der Figur
-                    List<Position> moves = getMovesForRequest(defenderPos);
-
-                    // Kann der Angreifer geschlagen werden?
-                    if (moves.contains(attacker)) {
-                        return false;
-                    }
-
-                    // Kann sich eine Figur dazwischen stellen?
-                    if (hasClearLine(kingPos, attacker)) { // Nur wenn Angreifer und König auf einer Linie
-                        List<Position> blockingSquares = squaresBetweenExclusive(kingPos, attacker);
-                        for (Position blockPos : blockingSquares) {
-                            if (moves.contains(blockPos)) {
-                                return false; // Eine Figur kann blocken
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Wenn weder der König sich bewegen noch eine andere Figur helfen kann -> Matt
-        return true;
+        // 2. Prüfe ob das verteidigende Team überhaupt noch legale Züge hat
+        // Wenn es noch legale Züge gibt, ist es kein Matt
+        return noMovesLeft(defendingTeam);
     }
 
     // Prüft, ob pos zwischen start und end liegt (exkl. start und end), nur für gerade Linien (horizontal, vertikal, diagonal).
@@ -720,14 +673,22 @@ public class GameController {
     }
 
 
-    // Prüft, ob das aktive Team keine legalen Züge mehr hat (Patt-Situation)
+    // Prüft, ob das angegebene Team keine legalen Züge mehr hat (Patt-Situation)
     public boolean noMovesLeft(TeamColor team) {
         for(int x = 0; x < 8; x++) {
             for(int y = 0; y < 8; y++) {
                 Position pos = new Position(x, y);
                 ChessPiece piece = board.getPiece(y, x);
                 if(piece != null && piece.getColour() == team) {
+                    // Temporär das aktive Team auf das zu prüfende Team setzen
+                    TeamColor originalActiveTeam = this.aktiveTeam;
+                    this.aktiveTeam = team;
+
                     List<String> possibleMoves = getMovesForRequestAsString(pos);
+
+                    // Aktives Team wieder zurücksetzen
+                    this.aktiveTeam = originalActiveTeam;
+
                     if(!possibleMoves.isEmpty()) {
                         return false;
                     }

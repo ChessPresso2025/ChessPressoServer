@@ -64,7 +64,7 @@ public class GameMessageController {
         PieceType promotedPiece = moveRequest.getPromotedPiece();
 
         // Check pawn promotion before applyMove()
-        ChessPiece moving = gameController.getBoard().getPiece(start.getY(), start.getX());
+        ChessPiece moving = gameController.getBoard().getPiece(start.getX(), start.getY());
         boolean isPromotion = checkPromotion(end, moving);
         if(isPromotion && (promotedPiece == null || promotedPiece == PieceType.NULL)) {
             messagingTemplate.convertAndSend(TOPIC_GAME_PREFIX + moveRequest.lobbyId + "/move/promotion",
@@ -89,7 +89,7 @@ public class GameMessageController {
                 checkedKingPosition = kingPos;
 
                 // Wenn der König im Schach steht, prüfe auf Schachmatt
-                if (gameController.isCheckMate(kingPos, gameController.getAktiveTeam())) {
+                if (gameController.isCheckmate(gameController.getAktiveTeam())) {
                     // Nutze die aktuelle Liste der Angreifer für die Response
                     checkMatePositions = gameController.getCurrentAttackers().stream()
                         .map(Position::getPos)

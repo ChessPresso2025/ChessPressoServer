@@ -37,6 +37,11 @@ public class UserService {
         }
     }
 
+    public UUID getIdByUsername(String username) {
+        Optional<User> userOpt = getUserByUsername(username);
+        return userOpt.map(User::getId).orElse(null);
+    }
+
 
     public Optional<User> getUserById(String userId) {
         try {

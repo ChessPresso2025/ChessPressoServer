@@ -8,31 +8,35 @@ import org.example.chesspressoserver.models.gamemodels.TeamColor;
 public class Board {
     private ChessPiece[][] cells = new ChessPiece[8][8];
 
-    public ChessPiece getPiece(int row, int col) {
-        ChessPiece piece = cells[row][col];
+    public ChessPiece getPiece(int x, int y) {
+        ChessPiece piece = cells[y][x];
         return piece;
     }
 
-    public void setPiece(int row, int col, ChessPiece piece) {
-        cells[row][col] = piece;
+    public ChessPiece getPiece(Position pos) {
+        return getPiece(pos.getX(), pos.getY());
     }
 
-    public void removePiece(int row, int col) {
-        cells[row][col] = null;
+    public void setPiece(int x, int y, ChessPiece piece) {
+        cells[y][x] = piece;
     }
 
-    public boolean checkEmpty(int row, int col) {
-        return cells[row][col] == null;
+    public void removePiece(int x, int y) {
+        cells[y][x] = null;
+    }
+
+    public boolean checkEmpty(int x, int y) {
+        return cells[y][x] == null;
     }
 
     public Position getKingPosition(TeamColor teamColor) {
-        for (int row = 0; row < 8; row++) {
-            for (int col = 0; col < 8; col++) {
-                ChessPiece p = cells[row][col];
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                ChessPiece p = cells[y][x];
                 if (p != null
                         && p.getType() == PieceType.KING
                         && p.getColour() == teamColor) {
-                    return new Position(col, row);
+                    return new Position(x, y);
                 }
             }
         }
